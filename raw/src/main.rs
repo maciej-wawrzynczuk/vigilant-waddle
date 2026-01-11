@@ -1,5 +1,7 @@
+use std::path::{Path, PathBuf};
 use anyhow::Result;
 use chrono::Utc;
+use reqwest::Client;
 
 const DATA_BASE: &str = "/home/maciekw/proj/vigilant-waddle/data";
 
@@ -14,13 +16,36 @@ fn stooq_url(ticker: &str) -> String {
     format!("https://stooq.com/q/d/l/?s={ticker}&i=d")
 }
 
-fn stooq_path(symbol: &str) -> String {
+async fn stooq_download(symbol: &str) -> Result<()> {
+    let client = Client::new();
+    let response = client
+        .get(stooq_url(symbol))
+        .send()
+        .await?;
+    let bytes = response
+        .bytes()
+        .await?;
+
+    Ok(())
+}
+
+fn stooq_path(symbol: &str) -> PathBuf {
     let now = Utc::now();
     let year = now.format("%Y").to_string();
     let month = now.format("%m").to_string();
     let day = now.format("%d").to_string();
     let ts = now.format("%Y%m%dT%H%M%SZ").to_string();
-    format!("{DATA_BASE}/raw/stooq/{symbol}/{year}/{month}/{day}/{ts}.csv")
+
+    PathBuf::from(DATA_BASE)
+        .join("raw")
+        .join("stooq")
+        .join(symbol)
+        .join(year)
+        .join(month)
+        .join(day)
+        .join(format!("{ts}.csv"))
+
+    //format!("{DATA_BASE}/raw/stooq/{symbol}/{year}/{month}/{day}/{ts}.csv")
 }
 
 #[cfg(test)]
@@ -36,11 +61,10 @@ mod test {
 
     #[test]
     fn test_path() {
-        //  /home/maciekw/proj/vigilant-waddle/data/raw/stooq/foo/2026/01/11/20260111T115935Z.csv
         let r = Regex::new(r"/home/maciekw/proj/vigilant-waddle/data/raw/stooq/foo/\d{4}/\d{2}/\d{2}/.+csv").unwrap();
         let p = crate::stooq_path("foo");
-        println!("Returned {p}");
-        assert!(r.is_match(p.as_str()));
+        let p_str = p.to_str().unwrap();
+        println!("Returned {p_str}");
+        assert!(r.is_match(p_str));
     }
-
 }
