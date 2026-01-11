@@ -51,6 +51,7 @@ fn stooq_path(symbol: &str) -> PathBuf {
 #[cfg(test)]
 mod test {
     use regex::Regex;
+    use std::path::Component;
 
     #[test]
     fn test_daily_url() {
@@ -63,8 +64,12 @@ mod test {
     fn test_path() {
         let r = Regex::new(r"/home/maciekw/proj/vigilant-waddle/data/raw/stooq/foo/\d{4}/\d{2}/\d{2}/.+csv").unwrap();
         let p = crate::stooq_path("foo");
+        let parts: Vec<_> = p.components().collect();
         let p_str = p.to_str().unwrap();
         println!("Returned {p_str}");
-        assert!(r.is_match(p_str));
+        assert_eq!(parts[0], Component::RootDir);
+        assert_eq!(parts[1], Component::Normal("home".as_ref()));
+        assert_eq!(parts[7], Component::Normal("stooq".as_ref()));
+        assert!(r.is_match(p_str)); // maybe left regex for now...
     }
 }
