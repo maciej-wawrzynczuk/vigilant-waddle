@@ -1,4 +1,5 @@
 mod raw;
+mod hivepart;
 
 use crate::raw::stooq::stooq_download;
 use anyhow::Result;
