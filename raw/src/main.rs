@@ -1,5 +1,7 @@
 use std::path::PathBuf;
-use anyhow::Result;
+use std::fs::{create_dir_all, File};
+use std::io::{copy, BufWriter};
+use anyhow::{Context, Result};
 use chrono::Utc;
 use reqwest::Client;
 use url::Url;
@@ -8,8 +10,7 @@ const DATA_BASE: &str = "/home/maciekw/proj/vigilant-waddle/data";
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    println!("Hello, {}", stooq_url("ads.de")?.to_string());
-
+    stooq_download("ads.de").await?;
     Ok(())
 }
 
@@ -34,6 +35,14 @@ async fn stooq_download(symbol: &str) -> Result<()> {
     let bytes = response
         .bytes()
         .await?;
+
+    let path = stooq_path(symbol);
+    let dir = path.parent().with_context(|| format!("Something wrong with {:?}", path))?;
+    create_dir_all(dir).with_context(|| format!("Problem creating {:?}", dir))?;
+    let f = File::create(path)?;
+
+    let mut wr = BufWriter::new(f);
+    copy(&mut bytes.as_ref(), &mut wr)?;
 
     Ok(())
 }
