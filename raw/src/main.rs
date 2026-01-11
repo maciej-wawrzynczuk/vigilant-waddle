@@ -1,25 +1,34 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use anyhow::Result;
 use chrono::Utc;
 use reqwest::Client;
+use url::Url;
 
 const DATA_BASE: &str = "/home/maciekw/proj/vigilant-waddle/data";
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    println!("Hello, {}", stooq_url("ads.de"));
+    println!("Hello, {}", stooq_url("ads.de")?.to_string());
 
     Ok(())
 }
 
-fn stooq_url(ticker: &str) -> String {
-    format!("https://stooq.com/q/d/l/?s={ticker}&i=d")
+fn stooq_url(ticker: &str) -> Result<Url, url::ParseError> {
+    let mut u = Url::parse("https://stooq.com/q/d/l/")?;
+    {
+        let mut qp = u.query_pairs_mut();
+        qp.append_pair("s", ticker);
+        qp.append_pair("i", "d");
+    }
+        
+    Ok(u)
+    // Url::newformat!("https://stooq.com/q/d/l/?s={ticker}&i=d")
 }
 
 async fn stooq_download(symbol: &str) -> Result<()> {
     let client = Client::new();
     let response = client
-        .get(stooq_url(symbol))
+        .get(stooq_url(symbol)?)
         .send()
         .await?;
     let bytes = response
@@ -57,7 +66,7 @@ mod test {
     fn test_daily_url() {
         let ticker = "foo";
         let expected = format!("https://stooq.com/q/d/l/?s={ticker}&i=d");
-        assert!(crate::stooq_url(ticker) == expected)
+        assert!(crate::stooq_url(ticker).unwrap().to_string() == expected)
     }
 
     #[test]
