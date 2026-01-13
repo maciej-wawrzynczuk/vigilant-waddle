@@ -6,6 +6,7 @@ use url::Url;
 use reqwest::Client;
 use tokio::fs::{create_dir_all, File};
 use tokio::io::{BufWriter, copy};
+use crate::hivepart;
 
 pub async fn stooq_download(symbol: &str) -> Result<()> {
     let url = stooq_url(symbol)?;
@@ -38,18 +39,19 @@ fn full_path(p: &Path) -> PathBuf {
 
 fn stooq_path(symbol: &str) -> PathBuf {
     let now = Utc::now();
-    let year = now.format("%Y").to_string();
-    let month = now.format("%m").to_string();
-    let day = now.format("%d").to_string();
+    let f = vec![
+        ("symbol".to_string(), symbol.to_string()),
+        ("year".to_string(), now.format("%Y").to_string()),
+        ("month".to_string(), now.format("%m").to_string()),
+        ("day".to_string(), now.format("%d").to_string())
+    ];
     let ts = now.format("%Y%m%dT%H%M%SZ").to_string();
+    let h_part = hivepart::mk_hive(f);
 
     PathBuf::new()
         .join("raw")
         .join("stooq")
-        .join(symbol)
-        .join(year)
-        .join(month)
-        .join(day)
+        .join(h_part)
         .join(format!("{ts}.csv"))
 
     //format!("{DATA_BASE}/raw/stooq/{symbol}/{year}/{month}/{day}/{ts}.csv")

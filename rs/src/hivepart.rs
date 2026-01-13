@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
-type Fields = Vec<(String, String)>;
+pub type Fields = Vec<(String, String)>;
 
-fn mk_hive(fields: Fields) -> PathBuf {
+pub fn mk_hive(fields: Fields) -> PathBuf {
     let mut p = PathBuf::new();
     for (k,v) in fields {
         p.push(format!("{k}={v}"));
