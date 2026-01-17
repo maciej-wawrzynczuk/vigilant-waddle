@@ -1,6 +1,6 @@
 mod config;
 mod raw;
-mod hivepart;
+mod paths;
 mod bronze;
 
 use crate::raw::stooq::stooq_download;

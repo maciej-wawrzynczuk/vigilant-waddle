@@ -13,7 +13,7 @@ pub fn mk_hive(fields: Fields) -> PathBuf {
 
 #[cfg(test)]
 mod test {
-    use crate::hivepart::mk_hive;
+    use crate::paths::mk_hive;
 
     #[test]
     fn test_mk_hive() {

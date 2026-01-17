@@ -6,7 +6,7 @@ use url::Url;
 use reqwest::Client;
 use tokio::fs::{create_dir_all, File};
 use tokio::io::{BufWriter, copy};
-use crate::hivepart;
+use crate::paths;
 
 pub trait DbConfig {
     fn db_base(&self) -> &str;
@@ -51,7 +51,7 @@ fn stooq_path(symbol: &str) -> PathBuf {
         ("day".to_string(), now.format("%d").to_string())
     ];
     let ts = now.format("%Y%m%dT%H%M%SZ").to_string();
-    let h_part = hivepart::mk_hive(f);
+    let h_part = paths::mk_hive(f);
 
     PathBuf::new()
         .join("raw")
