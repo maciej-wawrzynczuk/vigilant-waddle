@@ -13,9 +13,11 @@ pub const DATA_BASE: &str = "/home/maciekw/proj/vigilant-waddle/data";
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let c = crate::config::SillyConfig;
+
     let symbols = vec!["ads.de", "ibm.us"];
     env_logger::init();
-    let futs = symbols.into_iter().map(|s| stooq_download(s));
+    let futs = symbols.into_iter().map(|s| stooq_download(s, &c));
     join_all(futs).await;
     list_files()
         .for_each(|f| println!("{}", f.display()));
