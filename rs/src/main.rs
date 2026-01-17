@@ -1,3 +1,4 @@
+mod config;
 mod raw;
 mod hivepart;
 mod bronze;

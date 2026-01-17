@@ -7,6 +7,12 @@ use reqwest::Client;
 use tokio::fs::{create_dir_all, File};
 use tokio::io::{BufWriter, copy};
 use crate::hivepart;
+use crate::config::SillyConfig;
+
+pub trait DbConfig {
+    fn db_base(&self) -> &str;
+}
+
 
 pub async fn stooq_download(symbol: &str) -> Result<()> {
     let url = stooq_url(symbol)?;
@@ -20,7 +26,9 @@ pub async fn stooq_download(symbol: &str) -> Result<()> {
         .bytes()
         .await?;
 
-    let path = full_path(stooq_path(symbol).as_path());
+    let c = SillyConfig;
+
+    let path = full_path(stooq_path(symbol).as_path(), &c);
     log::info!("Saving to {}", path.to_str().with_context(|| "as_str failed for path. Why???")?);
     let dir = path.parent().with_context(|| format!("Something wrong with {:?}", path))?;
     create_dir_all(dir).await?;
@@ -32,8 +40,8 @@ pub async fn stooq_download(symbol: &str) -> Result<()> {
     Ok(())
 }
 
-fn full_path(p: &Path) -> PathBuf {
-    PathBuf::from(crate::DATA_BASE)
+fn full_path<T: DbConfig>(p: &Path, c: &T) -> PathBuf {
+    PathBuf::from(c.db_base())
         .join(p)
 }
 
