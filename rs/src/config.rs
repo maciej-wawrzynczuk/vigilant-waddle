@@ -1,4 +1,4 @@
-use crate::raw::stooq::DbConfig;
+use crate::paths::DbConfig;
 
 pub struct SillyConfig;
 
