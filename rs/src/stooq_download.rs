@@ -4,12 +4,13 @@ use url::Url;
 use reqwest::Client;
 use tokio::fs::{create_dir_all, File};
 use tokio::io::{BufWriter, copy};
-use crate::paths::{PathMan, DbConfig};
+use std::path::Path;
 
 
-pub async fn stooq_download<T: DbConfig>(symbol: &str, pm: &PathMan<'_, T>) -> Result<()> {
-    let mut path = pm.patch_from_tags(&["raw", "stooq",format!("symbol={symbol}").as_str()]);
-    path.push("data.csv");
+pub async fn stooq_download(symbol: &str, base_path: &Path) -> Result<()> {
+    let path = base_path.to_path_buf()
+        .join(format!("symbol={symbol}"))
+        .join("data.csv");
 
     let url = stooq_url(symbol)?;
     log::info!("Downloading {url}");
