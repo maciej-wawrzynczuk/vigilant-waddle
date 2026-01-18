@@ -4,10 +4,13 @@ use url::Url;
 use reqwest::Client;
 use tokio::fs::{create_dir_all, File};
 use tokio::io::{BufWriter, copy};
-use crate::paths::{DbConfig, full_path, part_path};
+use crate::paths::{PathMan, DbConfig};
 
 
-pub async fn stooq_download<T: DbConfig>(symbol: &str, c: &T) -> Result<()> {
+pub async fn stooq_download<T: DbConfig>(symbol: &str, pm: &PathMan<'_, T>) -> Result<()> {
+    let mut path = pm.patch_from_tags(&["raw", "stooq",format!("symbol={symbol}").as_str()]);
+    path.push("data.csv");
+
     let url = stooq_url(symbol)?;
     log::info!("Downloading {url}");
     let client = Client::new();
@@ -19,7 +22,6 @@ pub async fn stooq_download<T: DbConfig>(symbol: &str, c: &T) -> Result<()> {
         .bytes()
         .await?;
 
-    let path = full_path(part_path("stooq", symbol).as_path(), c);
     log::info!("Saving to {}", path.to_str().with_context(|| "as_str failed for path. Why???")?);
     let dir = path.parent().with_context(|| format!("Something wrong with {:?}", path))?;
     create_dir_all(dir).await?;
@@ -48,7 +50,7 @@ fn stooq_url(ticker: &str) -> Result<Url, url::ParseError> {
 
 #[cfg(test)]
 mod test {
-    use crate::raw::stooq::{stooq_url};
+    use crate::stooq_download::{stooq_url};
 
     #[test]
     fn test_daily_url() {
