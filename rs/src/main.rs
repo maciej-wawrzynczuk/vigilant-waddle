@@ -19,9 +19,11 @@ async fn main() -> Result<()> {
 
     let symbols = vec!["ads.de", "ibm.us"];
     let futs = symbols.into_iter().map(|s| stooq_download(s, &base_path));
-    join_all(futs).await;
-    list_files()
-        .for_each(|f| println!("{}", f.display()));
+    let result = join_all(futs).await;
+
+    result.into_iter()
+        .filter_map(|r| r.ok())
+        .for_each(|i| println!("{}", i.display()));
 
     Ok(())
 }

@@ -4,10 +4,10 @@ use url::Url;
 use reqwest::Client;
 use tokio::fs::{create_dir_all, File};
 use tokio::io::{BufWriter, copy};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 
-pub async fn stooq_download(symbol: &str, base_path: &Path) -> Result<()> {
+pub async fn stooq_download(symbol: &str, base_path: &Path) -> Result<PathBuf> {
     let path = base_path.to_path_buf()
         .join(format!("symbol={symbol}"))
         .join("data.csv");
@@ -26,12 +26,12 @@ pub async fn stooq_download(symbol: &str, base_path: &Path) -> Result<()> {
     log::info!("Saving to {}", path.to_str().with_context(|| "as_str failed for path. Why???")?);
     let dir = path.parent().with_context(|| format!("Something wrong with {:?}", path))?;
     create_dir_all(dir).await?;
-    let f = File::create(path).await?;
+    let f = File::create(&path).await?;
 
     let mut wr = BufWriter::new(f);
     copy(&mut bytes.as_ref(), &mut wr).await?;
 
-    Ok(())
+    Ok(path)
 }
 
 
