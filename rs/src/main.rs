@@ -4,11 +4,10 @@ use crate::stooq_download::stooq_download;
 use anyhow::{Result, Context};
 use env_logger;
 use futures::future::join_all;
-use std::path::PathBuf;
-use polars::prelude::*;
-
-// use polars_core::prelude::*;
-// use polars_io::prelude::*;
+use std::{io::Seek, path::PathBuf};
+use std::fs::File;
+use arrow::csv::{ReaderBuilder, reader::Format};
+use std::sync::Arc;
 
 pub const DATA_BASE: &str = "/home/maciekw/proj/vigilant-waddle/data";
 
@@ -28,15 +27,21 @@ async fn main() -> Result<()> {
         .next()
         .context("None downloaded")?;
 
-    let df = CsvReadOptions::default()
-        .with_has_header(true)
-        .try_into_reader_with_file_path(Some(the_first_path))?
-        .finish()?;
+    let mut f = File::open(&the_first_path)?;
 
-    let sh = df.schema();
-    let h = df.height();
-    println!("{sh:?}");
-    println!("{h}");
+    let (schema, _) = Format::default().infer_schema(&f, Some(100))?;
+    f.rewind()?;
+
+    let mut rd = ReaderBuilder::new(Arc::new(schema))
+        .with_header(true)
+        .build(&f)?;
+
+    while let Some(b) = rd.next() {
+        let b = b?;
+        println!("{b:?}");
+    }
+
+    println!("{}", the_first_path.display());
 
     Ok(())
 }
