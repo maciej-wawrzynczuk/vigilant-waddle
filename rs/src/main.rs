@@ -1,8 +1,9 @@
 mod stooq_download;
 
 use crate::stooq_download::stooq_download;
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
 use env_logger;
+use log;
 use futures::future::join_all;
 use std:: path::PathBuf;
 use std::fs::File;
@@ -15,18 +16,10 @@ pub const DATA_BASE: &str = "/home/maciekw/proj/vigilant-waddle/data";
 #[tokio::main]
 async fn main() -> Result<()> {
     env_logger::init();
-    let base_path = PathBuf::from(DATA_BASE)
-        .join("raw")
-        .join("stooq");
 
-    let symbols = vec!["ads.de", "ibm.us"];
-    let futs = symbols.into_iter().map(|s| stooq_download(s, &base_path));
-    let result = join_all(futs).await;
-
-    let the_first_path = result.into_iter()
-        .filter_map(|x| x.ok())
-        .next()
-        .context("None downloaded")?;
+    let the_first_path = download_example()
+        .await
+        .next().with_context(|| "None downloaded")?;
 
     let f = File::open(&the_first_path)?;
 
@@ -51,4 +44,26 @@ async fn main() -> Result<()> {
     println!("{}", the_first_path.display());
 
     Ok(())
+}
+
+
+async fn download_example() -> impl Iterator<Item = PathBuf> {
+    let base_path = PathBuf::from(DATA_BASE)
+        .join("raw")
+        .join("stooq");
+
+    let symbols = vec!["ads.de", "ibm.us"];
+    let futs = symbols.into_iter().map(|s| stooq_download(s, &base_path));
+    let result = join_all(futs).await;
+
+    result.into_iter()
+        .filter_map(|x| {
+            match x {
+                Ok(v) => Some(v),
+                Err(e) => {
+                    log::error!("{e}");
+                    None
+                }
+            }
+        })
 }
