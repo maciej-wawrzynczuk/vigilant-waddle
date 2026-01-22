@@ -11,12 +11,31 @@ use arrow::csv::ReaderBuilder;
 use arrow::datatypes::{Field, Schema, DataType};
 use arrow::record_batch::RecordBatch;
 use std::sync::Arc;
+use clap::{Parser, Subcommand};
+
+#[derive(Parser)]
+#[command(version, about, long_about = None)]
+struct Cli{
+    #[command(subcommand)]
+    command: Option<Commands>
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Downloads quotes from stooq
+    Stooq {
+        #[arg(short, long)]
+        symbol: String
+    }
+}
 
 pub const DATA_BASE: &str = "/home/maciekw/proj/vigilant-waddle/data";
 
 #[tokio::main]
 async fn main() -> Result<()> {
     env_logger::init();
+
+    Cli::parse();
 
     let the_first_path = download_example()
         .await
