@@ -1,15 +1,15 @@
+// TODO: use MIC:Ticker.
+// Write mapping to Stooq symbols.
 mod stooq_download;
+mod dataframe;
 
-use crate::stooq_download::stooq_download;
+use crate::{
+    stooq_download::stooq_download,
+    dataframe::load_csv
+};
+
 use anyhow::Result;
 use env_logger;
-use log;
-use std:: path::{Path, PathBuf};
-use std::fs::File;
-use arrow::csv::ReaderBuilder;
-use arrow::datatypes::{Field, Schema, DataType};
-use arrow::record_batch::RecordBatch;
-use std::sync::Arc;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
@@ -25,6 +25,10 @@ enum Commands {
     Stooq {
         #[arg(short, long)]
         symbol: String
+    },
+    Dataframe {
+        #[arg(short, long)]
+        symbol: String
     }
 }
 
@@ -37,11 +41,12 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match &cli.command {
-        Some(Commands::Stooq { symbol} ) => {
-            let base_path = PathBuf::from(DATA_BASE)
-                .join("raw")
-                .join("stooq");
-            stooq_download(symbol, &base_path).await?;
+        Some(Commands::Stooq { symbol}) => {
+            stooq_download(symbol).await?;
+        },
+        Some(Commands::Dataframe { symbol }) => {
+            let df = load_csv(symbol)?;
+            println!("{df}");
         },
         None => {}
     }
@@ -49,32 +54,3 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-
-fn mk_arrow(p: &Path) -> Result<Vec<RecordBatch>> {
-
-    let f = File::open(p)?;
-
-    let schema = Schema::new(vec![
-        Field::new("date", DataType::Date32, false),
-        Field::new("open", DataType::Float64, false),
-        Field::new("high", DataType::Float64, false),
-        Field::new("low", DataType::Float64, false),
-        Field::new("close", DataType::Float64, false),
-        Field::new("volume", DataType::Int64, false),
-    ]); 
-
-    let rd = ReaderBuilder::new(Arc::new(schema))
-        .with_header(true)
-        .build(&f)?;
-
-    Ok(rd.filter_map(|r| {
-        match r {
-            Ok(br) => Some(br),
-            Err(e) => {
-                log::error!("{e}");
-                None
-            }
-        }
-    })
-    .collect())
-}

@@ -4,14 +4,11 @@ use url::Url;
 use reqwest::Client;
 use tokio::fs::{create_dir_all, File};
 use tokio::io::{BufWriter, copy};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 
-pub async fn stooq_download(symbol: &str, base_path: &Path) -> Result<PathBuf> {
-    let path = base_path.to_path_buf()
-        .join(format!("symbol={symbol}"))
-        .join("data.csv");
-
+pub async fn stooq_download(symbol: &str) -> Result<PathBuf> {
+    let path = raw_filename(symbol);
     let url = stooq_url(symbol)?;
     log::info!("Downloading {url}");
     let client = Client::new();
@@ -34,6 +31,13 @@ pub async fn stooq_download(symbol: &str, base_path: &Path) -> Result<PathBuf> {
     Ok(path)
 }
 
+pub fn raw_filename(symbol: &str) -> PathBuf {
+    PathBuf::from(crate::DATA_BASE)
+        .join("raw")
+        .join("stooq")
+        .join(format!("symbol={symbol}"))
+        .join("data.csv")
+}
 
 
 fn stooq_url(ticker: &str) -> Result<Url, url::ParseError> {
