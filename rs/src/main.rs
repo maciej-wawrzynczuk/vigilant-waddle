@@ -2,6 +2,7 @@
 // Write mapping to Stooq symbols.
 mod stooq_download;
 mod dataframe;
+mod transactions;
 
 use crate::{
     stooq_download::stooq_download,
