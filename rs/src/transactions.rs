@@ -2,7 +2,6 @@ use serde::Deserialize;
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use std::io::Read;
-use anyhow::Result;
 
 
 #[allow(dead_code)]
@@ -56,13 +55,18 @@ impl Transactions {
             .max_by_key(|x| x.date)
             .map(|x| &x.date)
     }
+
+    pub fn trans_by_date<'a>(&'a self, d: &'a NaiveDate) -> impl Iterator<Item = &'a MyTransaction> {
+        self.p.iter()
+            .filter(move |x| &x.date == d)
+    }
 }
 
 #[cfg(test)]
 mod test {
     use chrono::NaiveDate;
     use indoc::indoc;
-    use std::io::Cursor;
+    use std::io::{Cursor, Read};
 
     use crate::transactions::Transactions;
     #[test]
@@ -85,25 +89,22 @@ mod test {
 
     #[test]
     fn test_the_first1() {
-        let test_rd = Cursor::new(indoc! {"
-            date;symbol;number;price;commision;currency
-            2000-01-01;FOO;1;42.42;4.2;BAR
-            2000-01-02;BAZ;1;42.42;4.2;QUX
-        "});
-
-        let sut = Transactions::from_reader(test_rd).unwrap();
+        let sut = Transactions::from_reader(test_rd()).unwrap();
         assert_eq!(sut.first_date().unwrap(), &NaiveDate::from_ymd_opt(2000, 01, 01).unwrap())
     }
 
     #[test]
     fn test_the_last1() {
-        let test_rd = Cursor::new(indoc! {"
+        let sut = Transactions::from_reader(test_rd()).unwrap();
+        assert_eq!(sut.last_date().unwrap(), &NaiveDate::from_ymd_opt(2000, 01, 02).unwrap())
+    }
+
+    fn test_rd() -> impl Read {
+        Cursor::new(indoc! {"
             date;symbol;number;price;commision;currency
             2000-01-01;FOO;1;42.42;4.2;BAR
             2000-01-02;BAZ;1;42.42;4.2;QUX
-        "});
+        "})
 
-        let sut = Transactions::from_reader(test_rd).unwrap();
-        assert_eq!(sut.last_date().unwrap(), &NaiveDate::from_ymd_opt(2000, 01, 02).unwrap())
     }
 }
