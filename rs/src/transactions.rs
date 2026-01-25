@@ -99,12 +99,21 @@ mod test {
         assert_eq!(sut.last_date().unwrap(), &NaiveDate::from_ymd_opt(2000, 01, 02).unwrap())
     }
 
+    #[test]
+    fn test_by_date() {
+        let sut = Transactions::from_reader(test_rd()).unwrap();
+        let d = NaiveDate::from_ymd_opt(2000, 01, 01).unwrap();
+        let mut i = sut.trans_by_date(&d);
+        let v = i.next().unwrap();
+        assert_eq!(v.date, d);
+        assert!(i.next().is_none());
+    }
+
     fn test_rd() -> impl Read {
         Cursor::new(indoc! {"
             date;symbol;number;price;commision;currency
             2000-01-01;FOO;1;42.42;4.2;BAR
             2000-01-02;BAZ;1;42.42;4.2;QUX
         "})
-
     }
 }
