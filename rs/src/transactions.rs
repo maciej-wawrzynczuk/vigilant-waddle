@@ -44,10 +44,17 @@ impl Transactions {
     pub fn into_iter(&self) -> impl Iterator<Item = &MyTransaction> + '_ {
         self.p.iter()
     }
+
+    pub fn first_date(&self) -> Option<&NaiveDate> {
+        self.p.iter()
+            .min_by_key(|x| x.date)
+            .map(|x| &x.date)
+    }
 }
 
 #[cfg(test)]
 mod test {
+    use chrono::NaiveDate;
     use indoc::indoc;
     use std::io::Cursor;
 
@@ -59,8 +66,26 @@ mod test {
             2000-01-01;FOO;1;42.42;4.2;BAR
         "});
 
-        let sut = Transactions::from_reader(test_rd);
+        let sut = Transactions::from_reader(test_rd).unwrap();
         sut.into_iter().next().unwrap();
 
+    }
+
+    #[test]
+    fn test_date_empty() {
+        let sut = Transactions::new();
+        assert!(sut.first_date().is_none());
+    }
+
+    #[test]
+    fn test_the_first1() {
+        let test_rd = Cursor::new(indoc! {"
+            date;symbol;number;price;commision;currency
+            2000-01-01;FOO;1;42.42;4.2;BAR
+            2000-01-02;BAZ;1;42.42;4.2;QUX
+        "});
+
+        let sut = Transactions::from_reader(test_rd).unwrap();
+        assert_eq!(sut.first_date().unwrap(), &NaiveDate::from_ymd_opt(2000, 01, 01).unwrap())
     }
 }
