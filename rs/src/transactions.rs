@@ -50,6 +50,12 @@ impl Transactions {
             .min_by_key(|x| x.date)
             .map(|x| &x.date)
     }
+
+    pub fn last_date(&self) -> Option<&NaiveDate> {
+        self.p.iter()
+            .max_by_key(|x| x.date)
+            .map(|x| &x.date)
+    }
 }
 
 #[cfg(test)]
@@ -87,5 +93,17 @@ mod test {
 
         let sut = Transactions::from_reader(test_rd).unwrap();
         assert_eq!(sut.first_date().unwrap(), &NaiveDate::from_ymd_opt(2000, 01, 01).unwrap())
+    }
+
+    #[test]
+    fn test_the_last1() {
+        let test_rd = Cursor::new(indoc! {"
+            date;symbol;number;price;commision;currency
+            2000-01-01;FOO;1;42.42;4.2;BAR
+            2000-01-02;BAZ;1;42.42;4.2;QUX
+        "});
+
+        let sut = Transactions::from_reader(test_rd).unwrap();
+        assert_eq!(sut.last_date().unwrap(), &NaiveDate::from_ymd_opt(2000, 01, 02).unwrap())
     }
 }
