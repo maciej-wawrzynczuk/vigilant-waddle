@@ -1,11 +1,11 @@
-# My system
-## Data lake Architecture
-### RAW
-#### What to keep:
-- file data
-- unstable API data
-- API with rate limit
-#### Directory structure
-Stooq:
-!!! Use hive style partitioning....
-`raw/stooq/symbol=<symbol>/year=<y>/month=<m>/day=<d>/<timestamp>.csv`
+# My always unfinished transaction system
+
+## Use jenkins validation with pre-commit
+
+Set:
+
+```shell
+export JENKINS_URL=https://your-jenkins-instance.com
+export JENKINS_USER=your-username
+export JENKINS_TOKEN=your-api-token
+```
