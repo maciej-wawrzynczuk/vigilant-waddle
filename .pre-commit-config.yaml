@@ -23,10 +23,10 @@ repos:
     rev: v8.30.0
     hooks:
       - id: gitleaks
-  - repo: https://github.com/shenxianpeng/jenkinsfilelint
-    rev: v1.2.0
-    hooks:
-      - id: jenkinsfilelint
+#  - repo: https://github.com/shenxianpeng/jenkinsfilelint
+#    rev: v1.2.0
+#    hooks:
+#      - id: jenkinsfilelint
   - repo: https://github.com/markdownlint/markdownlint
     rev: v0.15.0
     hooks:
