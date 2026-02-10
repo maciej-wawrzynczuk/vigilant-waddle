@@ -23,5 +23,18 @@ pipeline {
                 '''
             }
         }
+        stage('Build image') {
+            steps {
+                script {
+                    COMMIT_HASH = sh(
+                        script: "git rev-parse --short HEAD",
+                        returnStdout: true
+                    )
+                    sh """
+                        buildah bud -t waddle-ws:latest -t waddle-ws:${COMMIT_HASH} .
+                    """
+                }
+            }
+        }
     }
 }
