@@ -12,6 +12,10 @@ jobs:
       - name: Chekout
         uses: actions/checkout@v6
 
+      - name: short SHA
+        id: vars
+        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
       - name: Setup muls tools
         run: sudo apt update && sudo apt install -y musl-tools
 
@@ -24,7 +28,6 @@ jobs:
       - name: build the binary
         run: cargo build --release --target x86_64-unknown-linux-musl --bin waddle-ws
 
-
       - name: Build image
         id: build
         uses: redhat-actions/buildah-build@v2
@@ -32,7 +35,7 @@ jobs:
           image: ${{ secrets.DOCKERHUB_USERNAME }}/waddle-ws
           tags: |
             latest
-            ${{ github.sha }}
+            ${{ steps.vars.outputs.sha_short }}
           containerfiles: ./Dockerfile
 
       - name: Push
