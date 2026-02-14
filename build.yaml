@@ -1,0 +1,5 @@
+- hosts: localhost
+  connection: local
+  tasks:
+
+    - command: cargo build --bin waddle-ws
