@@ -5,14 +5,27 @@ on:
     branches: ["main"]
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Chekout
         uses: actions/checkout@v6
 
-      - name: Build
+      - name: Setup muls tools
+        run: sudo apt update && sudo apt install -y musl-tools
+
+      - name: Install rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          target: x86_64-unknown-linux-musl
+          cache: true
+
+      - name: build the binary
+        run: cargo build --release --target x86_64-unknown-linux-musl --bin waddle-ws
+
+
+      - name: Build image
         id: build
         uses: redhat-actions/buildah-build@v2
         with:
