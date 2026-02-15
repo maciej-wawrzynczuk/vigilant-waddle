@@ -1,4 +1,4 @@
-FROM scratch
+FROM debian:bookworm-slim
 
 COPY target/x86_64-unknown-linux-musl/release/waddle-ws /waddle-ws
 EXPOSE 3000
