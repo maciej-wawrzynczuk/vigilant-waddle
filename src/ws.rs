@@ -13,6 +13,12 @@ struct AppState {
     transactions: Arc<Mutex<Option<Transactions>>>,
 }
 
+fn create_app(state: AppState) -> Router {
+    Router::new()
+        .route("/transactions", axum::routing::put(upload_transactions))
+        .with_state(state)
+}
+
 #[tokio::main]
 async fn main() {
     env_logger::init();
@@ -25,9 +31,7 @@ async fn main() {
         transactions: Arc::new(Mutex::new(None)),
     };
 
-    let app = Router::new()
-        .route("/transactions", axum::routing::put(upload_transactions))
-        .with_state(state);
+    let app = create_app(state);
     let listener = tokio::net::TcpListener::bind(listen_addr).await.unwrap();
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())
@@ -84,9 +88,7 @@ mod tests {
             transactions: Arc::new(Mutex::new(None)),
         };
 
-        let app = Router::new()
-            .route("/transactions", axum::routing::put(upload_transactions))
-            .with_state(state.clone());
+        let app = create_app(state.clone());
 
         let csv_data = "date;symbol;number;price;commision;currency\n2000-01-01;FOO;1;42.42;4.2;BAR\n";
         let boundary = "----boundary";
@@ -122,9 +124,7 @@ mod tests {
             transactions: Arc::new(Mutex::new(None)),
         };
 
-        let app = Router::new()
-            .route("/transactions", axum::routing::put(upload_transactions))
-            .with_state(state.clone());
+        let app = create_app(state.clone());
 
         let invalid_csv = "invalid,csv,data\n";
         let boundary = "----boundary";
