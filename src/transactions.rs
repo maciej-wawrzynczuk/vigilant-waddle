@@ -265,4 +265,35 @@ mod test {
 
         assert_eq!(sut.amount("FOO"), 2);
     }
+
+    #[test]
+    fn test_invalid_csv_fails() {
+        let invalid_csv = Cursor::new("invalid,csv,data\n");
+        let result = Transactions::try_from_reader(invalid_csv);
+        assert!(result.is_err(), "Expected parsing to fail for invalid CSV");
+    }
+
+    #[test]
+    fn test_wrong_delimiter_fails() {
+        let wrong_delimiter = Cursor::new(indoc! {"
+            date,symbol,number,price,commision,currency
+            2000-01-01,FOO,1,42.42,4.2,BAR
+        "});
+        let result = Transactions::try_from_reader(wrong_delimiter);
+        // This should either fail or return empty transactions
+        match result {
+            Ok(t) => assert_eq!(t.p.len(), 0, "Should have no transactions with wrong delimiter"),
+            Err(_) => {} // Also acceptable
+        }
+    }
+
+    #[test]
+    fn test_missing_required_fields() {
+        let missing_fields = Cursor::new(indoc! {"
+            date;symbol
+            2000-01-01;FOO
+        "});
+        let result = Transactions::try_from_reader(missing_fields);
+        assert!(result.is_err(), "Expected parsing to fail when required fields are missing");
+    }
 }
