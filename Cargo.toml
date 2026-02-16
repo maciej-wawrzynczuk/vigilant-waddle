@@ -13,7 +13,7 @@ path = "src/ws.rs"
 
 [dependencies]
 anyhow = "1.0.100"
-axum = "0.8.8"
+axum = { version = "0.8.8", features = ["multipart"] }
 chrono = { version = "0.4.43", features = ["serde"] }
 clap = { version = "4.5.54", features = ["derive"] }
 csv = "1.4.0"
@@ -25,4 +25,5 @@ reqwest = "0.13.1"
 rust_decimal = "1.40.0"
 serde = { version = "1.0.228", features = ["derive"] }
 tokio = { version = "1.49.0", features = ["full"] }
+tower = "0.5"
 url = "2.5.8"

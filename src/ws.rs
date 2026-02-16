@@ -8,6 +8,9 @@ use tower::ServiceExt;
 
 use crate::transactions::Transactions;
 
+#[path = "transactions.rs"]
+mod transactions;
+
 #[derive(Clone)]
 struct AppState {
     transactions: Arc<Mutex<Option<Transactions>>>,
