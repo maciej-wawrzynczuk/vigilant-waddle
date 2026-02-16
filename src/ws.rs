@@ -1,7 +1,7 @@
 use std::env;
 use std::sync::{Arc, Mutex};
 
-use axum::{extract::State, Router, routing::get};
+use axum::{extract::State, Router};
 use axum::extract::Multipart;
 use log::info;
 use tower::ServiceExt;
@@ -10,7 +10,6 @@ use crate::transactions::Transactions;
 
 #[derive(Clone)]
 struct AppState {
-    message: String,
     transactions: Arc<Mutex<Option<Transactions>>>,
 }
 
@@ -23,12 +22,10 @@ async fn main() {
     };
 
     let state = AppState {
-        message: "Hello, World!\n".to_string(),
         transactions: Arc::new(Mutex::new(None)),
     };
 
     let app = Router::new()
-        .route("/", get(handler))
         .route("/transactions", axum::routing::put(upload_transactions))
         .with_state(state);
     let listener = tokio::net::TcpListener::bind(listen_addr).await.unwrap();
@@ -38,10 +35,6 @@ async fn main() {
         .unwrap();
 }
 
-async fn handler(State(state): State<AppState>) -> String {
-    log::info!("GET / request received");
-    state.message
-}
 
 async fn upload_transactions(
     State(state): State<AppState>,
@@ -84,32 +77,10 @@ mod tests {
     use tower::ServiceExt; // for `oneshot`
     use axum::body::to_bytes;
 
-    #[tokio::test]
-    async fn test_handler_returns_message() {
-        let state = AppState {
-            message: "Test message\n".to_string(),
-            transactions: Arc::new(Mutex::new(None)),
-        };
-
-        let app = Router::new()
-            .route("/", get(handler))
-            .with_state(state);
-
-        let response = app
-            .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::OK);
-        
-        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-        assert_eq!(&body[..], b"Test message\n");
-    }
 
     #[tokio::test]
     async fn test_upload_transactions_success() {
         let state = AppState {
-            message: "Hello".to_string(),
             transactions: Arc::new(Mutex::new(None)),
         };
 
@@ -148,7 +119,6 @@ mod tests {
     #[tokio::test]
     async fn test_upload_transactions_invalid_csv() {
         let state = AppState {
-            message: "Hello".to_string(),
             transactions: Arc::new(Mutex::new(None)),
         };
 
