@@ -46,7 +46,11 @@ async fn upload_transactions(
     State(state): State<AppState>,
     mut multipart: Multipart,
 ) -> (axum::http::StatusCode, String) {
+    let mut field_count = 0;
+    
     while let Ok(Some(field)) = multipart.next_field().await {
+        field_count += 1;
+        
         let data = match field.bytes().await {
             Ok(d) => d,
             Err(e) => return (axum::http::StatusCode::BAD_REQUEST, format!("Failed to read bytes: {}\n", e)),
@@ -67,7 +71,11 @@ async fn upload_transactions(
         }
     }
     
-    (axum::http::StatusCode::BAD_REQUEST, "No file provided\n".to_string())
+    if field_count == 0 {
+        (axum::http::StatusCode::BAD_REQUEST, "No file provided\n".to_string())
+    } else {
+        (axum::http::StatusCode::BAD_REQUEST, "No valid file field found\n".to_string())
+    }
 }
 
 async fn shutdown_signal() {
