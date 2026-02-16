@@ -18,6 +18,7 @@ struct AppState {
 fn create_app(state: AppState) -> Router {
     Router::new()
         .route("/transactions", axum::routing::put(upload_transactions))
+        .route("/transactions", axum::routing::get(get_transactions))
         .with_state(state)
 }
 
@@ -40,7 +41,6 @@ async fn main() {
         .await
         .unwrap();
 }
-
 
 async fn upload_transactions(
     State(state): State<AppState>,
@@ -76,6 +76,21 @@ async fn upload_transactions(
             log::error!("Failed to parse transactions: {}", e);
             (axum::http::StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to parse CSV: {}\n", e))
         }
+    }
+}
+
+async fn get_transactions(
+    State(state): State<AppState>,
+) -> (axum::http::StatusCode, String) {
+    let guard = state.transactions.lock().unwrap();
+    match &*guard {
+        Some(transactions) => {
+            match transactions.to_json() {
+                Ok(json) => (axum::http::StatusCode::OK, json),
+                Err(e) => (axum::http::StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to serialize: {}\n", e)),
+            }
+        }
+        None => (axum::http::StatusCode::NOT_FOUND, "No transactions uploaded\n".to_string()),
     }
 }
 
@@ -164,5 +179,76 @@ mod tests {
         
         // Verify transactions were NOT stored
         assert!(state.transactions.lock().unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn test_get_transactions_empty() {
+        let state = AppState {
+            transactions: Arc::new(Mutex::new(None)),
+        };
+
+        let app = create_app(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/transactions")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_get_transactions_after_upload() {
+        let state = AppState {
+            transactions: Arc::new(Mutex::new(None)),
+        };
+
+        let app = create_app(state.clone());
+
+        // First upload
+        let csv_data = "date;symbol;number;price;commision;currency\n2000-01-01;FOO;1;42.42;4.2;BAR\n";
+        let boundary = "----boundary";
+        let body = format!(
+            "--{}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"test.csv\"\r\n\r\n{}\r\n--{}--\r\n",
+            boundary, csv_data, boundary
+        );
+
+        let _ = app
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri("/transactions")
+                    .header("content-type", format!("multipart/form-data; boundary={}", boundary))
+                    .body(Body::from(body))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        // Then GET
+        let app = create_app(state);
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/transactions")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert!(json["p"].as_array().unwrap().len() == 1);
+        assert!(json["p"][0]["symbol"] == "FOO");
     }
 }
