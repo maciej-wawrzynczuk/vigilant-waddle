@@ -96,10 +96,22 @@ impl Transactions {
     }
 
     pub fn try_from_reader<R: Read>(rd: R) -> csv::Result<Self> {
-        let v = csv::ReaderBuilder::new()
+        let mut rdr = csv::ReaderBuilder::new()
             .delimiter(b';')
             .has_headers(true)
-            .from_reader(rd)
+            .from_reader(rd);
+
+        // Validate headers
+        let headers = rdr.headers()?;
+        let expected = ["date", "symbol", "number", "price", "commision", "currency"];
+        if headers.len() != expected.len() || !expected.iter().zip(headers.iter()).all(|(e, h)| e == &h) {
+            return Err(csv::Error::from(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Invalid CSV headers",
+            )));
+        }
+
+        let v = rdr
             .into_deserialize()
             .collect::<csv::Result<Vec<MyTransaction>>>()?;
 
@@ -280,11 +292,7 @@ mod test {
             2000-01-01,FOO,1,42.42,4.2,BAR
         "});
         let result = Transactions::try_from_reader(wrong_delimiter);
-        // This should either fail or return empty transactions
-        match result {
-            Ok(t) => assert_eq!(t.p.len(), 0, "Should have no transactions with wrong delimiter"),
-            Err(_) => {} // Also acceptable
-        }
+        assert!(result.is_err(), "Expected parsing to fail with wrong delimiter");
     }
 
     #[test]
