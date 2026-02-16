@@ -3,13 +3,9 @@ use std::env;
 use axum::{Router, routing::get};
 use log::info;
 
-async fn handler() -> &'static str {
-    log::info!("GET / request received");
-    "Hello, World!\n"
-}
-
 #[tokio::main]
 async fn main() {
+    env_logger::init();
     let listen_addr = match env::var_os("WADDLE_LISTEN_PORT") {
         Some(a) => a.into_string().unwrap(),
         None => "127.0.0.1:3000".to_string(),
@@ -21,6 +17,11 @@ async fn main() {
         .with_graceful_shutdown(shutdown_signal())
         .await
         .unwrap();
+}
+
+async fn handler() -> &'static str {
+    log::info!("GET / request received");
+    "Hello, World!\n"
 }
 
 async fn shutdown_signal() {
