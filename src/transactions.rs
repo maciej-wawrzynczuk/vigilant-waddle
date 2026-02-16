@@ -112,7 +112,9 @@ impl Transactions {
         // Validate headers
         let headers = rdr.headers()?;
         let expected = ["date", "symbol", "number", "price", "commision", "currency"];
-        if headers.len() != expected.len() || !expected.iter().zip(headers.iter()).all(|(e, h)| e == &h) {
+        if headers.len() != expected.len()
+            || !expected.iter().zip(headers.iter()).all(|(e, h)| e == &h)
+        {
             return Err(csv::Error::from(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 "Invalid CSV headers",
@@ -300,7 +302,10 @@ mod test {
             2000-01-01,FOO,1,42.42,4.2,BAR
         "});
         let result = Transactions::try_from_reader(wrong_delimiter);
-        assert!(result.is_err(), "Expected parsing to fail with wrong delimiter");
+        assert!(
+            result.is_err(),
+            "Expected parsing to fail with wrong delimiter"
+        );
     }
 
     #[test]
@@ -310,7 +315,10 @@ mod test {
             2000-01-01;FOO
         "});
         let result = Transactions::try_from_reader(missing_fields);
-        assert!(result.is_err(), "Expected parsing to fail when required fields are missing");
+        assert!(
+            result.is_err(),
+            "Expected parsing to fail when required fields are missing"
+        );
     }
 
     #[test]

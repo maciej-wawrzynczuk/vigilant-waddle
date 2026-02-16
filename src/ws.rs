@@ -1,8 +1,8 @@
 use std::env;
 use std::sync::{Arc, Mutex};
 
-use axum::{extract::State, Router};
 use axum::extract::Multipart;
+use axum::{Router, extract::State};
 use log::info;
 
 use crate::transactions::Transactions;
@@ -48,49 +48,65 @@ async fn upload_transactions(
 ) -> (axum::http::StatusCode, String) {
     let mut all_data = Vec::new();
     let mut field_count = 0;
-    
+
     while let Ok(Some(field)) = multipart.next_field().await {
         field_count += 1;
-        
+
         let data = match field.bytes().await {
             Ok(d) => d,
-            Err(e) => return (axum::http::StatusCode::BAD_REQUEST, format!("Failed to read bytes: {}\n", e)),
+            Err(e) => {
+                return (
+                    axum::http::StatusCode::BAD_REQUEST,
+                    format!("Failed to read bytes: {}\n", e),
+                );
+            }
         };
-        
+
         all_data.extend_from_slice(&data);
     }
-    
+
     if field_count == 0 {
-        return (axum::http::StatusCode::BAD_REQUEST, "No file provided\n".to_string());
+        return (
+            axum::http::StatusCode::BAD_REQUEST,
+            "No file provided\n".to_string(),
+        );
     }
-    
+
     let cursor = std::io::Cursor::new(all_data);
-    
+
     match Transactions::try_from_reader(cursor) {
         Ok(transactions) => {
             *state.transactions.lock().unwrap() = Some(transactions);
             log::info!("Transactions uploaded successfully");
-            (axum::http::StatusCode::OK, "Transactions uploaded successfully\n".to_string())
+            (
+                axum::http::StatusCode::OK,
+                "Transactions uploaded successfully\n".to_string(),
+            )
         }
         Err(e) => {
             log::error!("Failed to parse transactions: {}", e);
-            (axum::http::StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to parse CSV: {}\n", e))
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to parse CSV: {}\n", e),
+            )
         }
     }
 }
 
-async fn get_transactions(
-    State(state): State<AppState>,
-) -> (axum::http::StatusCode, String) {
+async fn get_transactions(State(state): State<AppState>) -> (axum::http::StatusCode, String) {
     let guard = state.transactions.lock().unwrap();
     match &*guard {
-        Some(transactions) => {
-            match transactions.to_json() {
-                Ok(json) => (axum::http::StatusCode::OK, json),
-                Err(e) => (axum::http::StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to serialize: {}\n", e)),
-            }
-        }
-        None => (axum::http::StatusCode::NOT_FOUND, "No transactions uploaded\n".to_string()),
+        Some(transactions) => match transactions.to_json() {
+            Ok(json) => (axum::http::StatusCode::OK, json),
+            Err(e) => (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to serialize: {}\n", e),
+            ),
+        },
+        None => (
+            axum::http::StatusCode::NOT_FOUND,
+            "No transactions uploaded\n".to_string(),
+        ),
     }
 }
 
@@ -104,13 +120,12 @@ async fn shutdown_signal() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::body::to_bytes;
     use axum::{
         body::Body,
         http::{Request, StatusCode},
     };
     use tower::ServiceExt; // for `oneshot`
-    use axum::body::to_bytes;
-
 
     #[tokio::test]
     async fn test_upload_transactions_success() {
@@ -120,7 +135,8 @@ mod tests {
 
         let app = create_app(state.clone());
 
-        let csv_data = "date;symbol;number;price;commision;currency\n2000-01-01;FOO;1;42.42;4.2;BAR\n";
+        let csv_data =
+            "date;symbol;number;price;commision;currency\n2000-01-01;FOO;1;42.42;4.2;BAR\n";
         let boundary = "----boundary";
         let body = format!(
             "--{}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"test.csv\"\r\n\r\n{}\r\n--{}--\r\n",
@@ -132,7 +148,10 @@ mod tests {
                 Request::builder()
                     .method("PUT")
                     .uri("/transactions")
-                    .header("content-type", format!("multipart/form-data; boundary={}", boundary))
+                    .header(
+                        "content-type",
+                        format!("multipart/form-data; boundary={}", boundary),
+                    )
                     .body(Body::from(body))
                     .unwrap(),
             )
@@ -140,7 +159,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
-        
+
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         assert_eq!(&body[..], b"Transactions uploaded successfully\n");
 
@@ -168,7 +187,10 @@ mod tests {
                 Request::builder()
                     .method("PUT")
                     .uri("/transactions")
-                    .header("content-type", format!("multipart/form-data; boundary={}", boundary))
+                    .header(
+                        "content-type",
+                        format!("multipart/form-data; boundary={}", boundary),
+                    )
                     .body(Body::from(body))
                     .unwrap(),
             )
@@ -176,7 +198,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
-        
+
         // Verify transactions were NOT stored
         assert!(state.transactions.lock().unwrap().is_none());
     }
@@ -212,7 +234,8 @@ mod tests {
         let app = create_app(state.clone());
 
         // First upload
-        let csv_data = "date;symbol;number;price;commision;currency\n2000-01-01;FOO;1;42.42;4.2;BAR\n";
+        let csv_data =
+            "date;symbol;number;price;commision;currency\n2000-01-01;FOO;1;42.42;4.2;BAR\n";
         let boundary = "----boundary";
         let body = format!(
             "--{}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"test.csv\"\r\n\r\n{}\r\n--{}--\r\n",
@@ -224,7 +247,10 @@ mod tests {
                 Request::builder()
                     .method("PUT")
                     .uri("/transactions")
-                    .header("content-type", format!("multipart/form-data; boundary={}", boundary))
+                    .header(
+                        "content-type",
+                        format!("multipart/form-data; boundary={}", boundary),
+                    )
                     .body(Body::from(body))
                     .unwrap(),
             )
@@ -245,7 +271,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
-        
+
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert!(json["p"].as_array().unwrap().len() == 1);
