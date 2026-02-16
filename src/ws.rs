@@ -46,6 +46,7 @@ async fn upload_transactions(
     State(state): State<AppState>,
     mut multipart: Multipart,
 ) -> (axum::http::StatusCode, String) {
+    let mut all_data = Vec::new();
     let mut field_count = 0;
     
     while let Ok(Some(field)) = multipart.next_field().await {
@@ -56,25 +57,25 @@ async fn upload_transactions(
             Err(e) => return (axum::http::StatusCode::BAD_REQUEST, format!("Failed to read bytes: {}\n", e)),
         };
         
-        let cursor = std::io::Cursor::new(data);
-        
-        match Transactions::try_from_reader(cursor) {
-            Ok(transactions) => {
-                *state.transactions.lock().unwrap() = Some(transactions);
-                log::info!("Transactions uploaded successfully");
-                return (axum::http::StatusCode::OK, "Transactions uploaded successfully\n".to_string());
-            }
-            Err(e) => {
-                log::error!("Failed to parse transactions: {}", e);
-                return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to parse CSV: {}\n", e));
-            }
-        }
+        all_data.extend_from_slice(&data);
     }
     
     if field_count == 0 {
-        (axum::http::StatusCode::BAD_REQUEST, "No file provided\n".to_string())
-    } else {
-        (axum::http::StatusCode::BAD_REQUEST, "No valid file field found\n".to_string())
+        return (axum::http::StatusCode::BAD_REQUEST, "No file provided\n".to_string());
+    }
+    
+    let cursor = std::io::Cursor::new(all_data);
+    
+    match Transactions::try_from_reader(cursor) {
+        Ok(transactions) => {
+            *state.transactions.lock().unwrap() = Some(transactions);
+            log::info!("Transactions uploaded successfully");
+            (axum::http::StatusCode::OK, "Transactions uploaded successfully\n".to_string())
+        }
+        Err(e) => {
+            log::error!("Failed to parse transactions: {}", e);
+            (axum::http::StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to parse CSV: {}\n", e))
+        }
     }
 }
 
