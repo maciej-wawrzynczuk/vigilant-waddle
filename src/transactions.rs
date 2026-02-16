@@ -1,13 +1,15 @@
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::{
     fmt,
     fs::File,
     io::{BufReader, Read},
     path::Path,
 };
-
+/// # Errors
+///
+/// Propagates Err from `Transactions::try_from_reader`
 pub fn list_trans(p: &Path) -> anyhow::Result<()> {
     let f = File::open(p)?;
     let rd = BufReader::new(f);
@@ -26,7 +28,14 @@ pub struct Portfolio {
     data: Vec<(String, i32)>,
 }
 
+impl Default for Portfolio {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Portfolio {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             data: Vec::<(String, i32)>::new(),
@@ -37,6 +46,7 @@ impl Portfolio {
         self.data.iter().map(|p| p.0.as_str())
     }
 
+    #[must_use]
     pub fn amount(&self, symbol: &str) -> i32 {
         match self.data.iter().find(|t| t.0 == symbol) {
             Some(n) => n.1,
@@ -62,8 +72,7 @@ impl fmt::Display for Portfolio {
     }
 }
 
-#[allow(dead_code)]
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct MyTransaction {
     // date;symbol;number;price;commision;currency
     pub date: NaiveDate,
@@ -84,29 +93,56 @@ impl fmt::Display for MyTransaction {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Clone)]
+#[serde(transparent)]
 pub struct Transactions {
     p: Vec<MyTransaction>,
 }
 
+impl Default for Transactions {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Transactions {
-    #[allow(dead_code)]
+    #[must_use]
     pub fn new() -> Self {
         Self { p: Vec::new() }
     }
 
+    /// # Errors
+    ///
+    /// Fails when:
+    /// - Unable to find headers
+    /// - Has bad haders
+    /// - Hit format errors.
     pub fn try_from_reader<R: Read>(rd: R) -> csv::Result<Self> {
-        let v = csv::ReaderBuilder::new()
+        let mut rdr = csv::ReaderBuilder::new()
             .delimiter(b';')
             .has_headers(true)
-            .from_reader(rd)
+            .from_reader(rd);
+
+        // Validate headers
+        let headers = rdr.headers()?;
+        let expected = ["date", "symbol", "number", "price", "commision", "currency"];
+        if headers.len() != expected.len()
+            || !expected.iter().zip(headers.iter()).all(|(e, h)| e == &h)
+        {
+            return Err(csv::Error::from(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Invalid CSV headers",
+            )));
+        }
+
+        let v = rdr
             .into_deserialize()
             .collect::<csv::Result<Vec<MyTransaction>>>()?;
 
         Ok(Self { p: v })
     }
 
-    #[allow(dead_code)]
+    #[must_use]
     pub fn my_days_iter(&self) -> Box<dyn Iterator<Item = NaiveDate> + '_> {
         match (self.first_date(), self.last_date()) {
             (Some(start), Some(end)) => Box::new(start.iter_days().take_while(move |d| d <= end)),
@@ -118,15 +154,16 @@ impl Transactions {
         self.p.iter()
     }
 
+    #[must_use]
     pub fn first_date(&self) -> Option<&NaiveDate> {
         self.p.iter().min_by_key(|x| x.date).map(|x| &x.date)
     }
 
+    #[must_use]
     pub fn last_date(&self) -> Option<&NaiveDate> {
         self.p.iter().max_by_key(|x| x.date).map(|x| &x.date)
     }
 
-    #[allow(dead_code)]
     pub fn trans_by_date<'a>(
         &'a self,
         d: &'a NaiveDate,
@@ -264,5 +301,38 @@ mod test {
         t.iter().for_each(|t| sut.add_transaction(t));
 
         assert_eq!(sut.amount("FOO"), 2);
+    }
+
+    #[test]
+    fn test_invalid_csv_fails() {
+        let invalid_csv = Cursor::new("invalid,csv,data\n");
+        let result = Transactions::try_from_reader(invalid_csv);
+        assert!(result.is_err(), "Expected parsing to fail for invalid CSV");
+    }
+
+    #[test]
+    fn test_wrong_delimiter_fails() {
+        let wrong_delimiter = Cursor::new(indoc! {"
+            date,symbol,number,price,commision,currency
+            2000-01-01,FOO,1,42.42,4.2,BAR
+        "});
+        let result = Transactions::try_from_reader(wrong_delimiter);
+        assert!(
+            result.is_err(),
+            "Expected parsing to fail with wrong delimiter"
+        );
+    }
+
+    #[test]
+    fn test_missing_required_fields() {
+        let missing_fields = Cursor::new(indoc! {"
+            date;symbol
+            2000-01-01;FOO
+        "});
+        let result = Transactions::try_from_reader(missing_fields);
+        assert!(
+            result.is_err(),
+            "Expected parsing to fail when required fields are missing"
+        );
     }
 }

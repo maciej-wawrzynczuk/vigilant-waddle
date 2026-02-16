@@ -1,26 +1,93 @@
-use std::env;
+use axum::{
+    Json, Router,
+    extract::{Multipart, State},
+};
+use http::StatusCode;
+use std::{
+    env,
+    io::Cursor,
+    sync::{Arc, Mutex},
+};
+use tower_http::trace::TraceLayer;
+use tracing::{error, info};
+use tracing_subscriber::{filter::EnvFilter, fmt, prelude::*};
+use vigilant_waddle::transactions::Transactions;
 
-use axum::{Router, routing::get};
-use log::info;
+#[derive(Clone, Debug)]
+struct AppState {
+    msg: String,
+    transactions: Arc<Mutex<Transactions>>,
+}
 
 #[tokio::main]
 async fn main() {
-    let listen_addr = match env::var_os("WADDLE_LISTEN_PORT") {
+    tracing_subscriber::registry()
+        .with(fmt::layer())
+        .with(EnvFilter::from_default_env())
+        .init();
+
+    let listen_addr = match env::var_os("WADDLE_LISTEN_ADDR") {
         Some(a) => a.into_string().unwrap(),
         None => "127.0.0.1:3000".to_string(),
     };
 
-    let app = Router::new().route("/", get(|| async { "Hello, World!\n" }));
-    let listener = tokio::net::TcpListener::bind(listen_addr).await.unwrap();
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal())
-        .await
-        .unwrap();
+    let app = create_app();
+    let listener = tokio::net::TcpListener::bind(&listen_addr).await.unwrap();
+    println!("Listenin on http://{listen_addr}");
+    axum::serve(listener, app).await.unwrap();
 }
 
-async fn shutdown_signal() {
-    tokio::signal::ctrl_c()
-        .await
-        .expect("Failed to install Ctrl-c handler");
-    info!("Ctr-c pressed");
+async fn hello_handler(State(s): State<AppState>) -> String {
+    s.msg
+}
+
+async fn get_tranasactions(State(s): State<AppState>) -> Json<Transactions> {
+    let data = s.transactions.lock().unwrap();
+    Json(data.clone())
+}
+
+async fn post_transactions(
+    State(s): State<AppState>,
+    mut data: Multipart,
+) -> Result<(), StatusCode> {
+    while let Some(f) = data.next_field().await.map_err(|_| {
+        error!("Multipart error");
+        StatusCode::BAD_REQUEST
+    })? {
+        if let Some(name) = f.name()
+            && name == "transaction_log"
+        {
+            let csv = f
+                .bytes()
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            let csv_c = Cursor::new(csv);
+            let t = Transactions::try_from_reader(csv_c).map_err(|e| {
+                error!("CSV read error: {e}");
+                StatusCode::BAD_REQUEST
+            })?;
+            info!("{} loaded", t.iter().count());
+            let mut guard = s
+                .transactions
+                .lock()
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            *guard = t;
+            return Ok(());
+        }
+    }
+    error!("No transaction_log field in the request");
+    Err(StatusCode::BAD_REQUEST)
+}
+
+fn create_app() -> Router {
+    let s = AppState {
+        msg: "Hello World!".to_string(),
+        transactions: Arc::new(Mutex::new(Transactions::new())),
+    };
+    Router::new()
+        .route("/hello", axum::routing::get(hello_handler))
+        .route("/transactions", axum::routing::get(get_tranasactions))
+        .route("/transactions", axum::routing::post(post_transactions))
+        .layer(TraceLayer::new_for_http())
+        .with_state(s)
 }
