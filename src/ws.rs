@@ -4,7 +4,6 @@ use std::sync::{Arc, Mutex};
 use axum::{extract::State, Router};
 use axum::extract::Multipart;
 use log::info;
-use tower::ServiceExt;
 
 use crate::transactions::Transactions;
 
@@ -47,12 +46,7 @@ async fn upload_transactions(
     State(state): State<AppState>,
     mut multipart: Multipart,
 ) -> (axum::http::StatusCode, String) {
-    while let Some(field) = multipart.next_field().await.map_err(|e| e.to_string()) {
-        let field = match field {
-            Ok(f) => f,
-            Err(e) => return (axum::http::StatusCode::BAD_REQUEST, format!("Multipart error: {}\n", e)),
-        };
-        
+    while let Ok(Some(field)) = multipart.next_field().await {
         let data = match field.bytes().await {
             Ok(d) => d,
             Err(e) => return (axum::http::StatusCode::BAD_REQUEST, format!("Failed to read bytes: {}\n", e)),
