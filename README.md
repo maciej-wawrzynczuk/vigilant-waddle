@@ -5,9 +5,10 @@
 - Load a transaction log from a csv file - done
 - Get quotes from Stooq
 - Evaluate - how the portfolio performs:
-  - Calculate daily return: (Value(t) - Value(t-1)) / Value(t-1).
-     Utilize static content, and if changes occur between periods, calculate “t-1” using “t” content.
-     If it changed in between, the "t-1" value is calculated usint "t" content.
+  - Calculate daily return: (Value(t) - Value(t-1)) / Value(t-1). Utilize static
+    content, and if changes occur between periods, calculate "t-1" using "t"
+    content. If it changed in between, the "t-1" value is calculated using "t"
+    content.
   - Draw a chart. Using annualized values and SMA smoothing.
 
 ## Techstack
