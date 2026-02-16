@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: waddle-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: waddle
+  template:
+    metadata:
+      name: waddle-pod
+      labels:
+        app: waddle
+    spec:
+      containers:
+        - name: waddle-container
+          image: maciekw/waddle-ws:latest
+          ports:
+            - containerPort: 3000
