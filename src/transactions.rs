@@ -1,6 +1,6 @@
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::{
     fmt,
     fs::File,
@@ -63,7 +63,7 @@ impl fmt::Display for Portfolio {
 }
 
 #[allow(dead_code)]
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct MyTransaction {
     // date;symbol;number;price;commision;currency
     pub date: NaiveDate,
@@ -84,7 +84,7 @@ impl fmt::Display for MyTransaction {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct Transactions {
     p: Vec<MyTransaction>,
 }
@@ -93,6 +93,14 @@ impl Transactions {
     #[allow(dead_code)]
     pub fn new() -> Self {
         Self { p: Vec::new() }
+    }
+
+    pub fn to_json(&self) -> serde_json::Result<String> {
+        serde_json::to_string(&self)
+    }
+
+    pub fn to_json_pretty(&self) -> serde_json::Result<String> {
+        serde_json::to_string_pretty(&self)
     }
 
     pub fn try_from_reader<R: Read>(rd: R) -> csv::Result<Self> {
@@ -303,5 +311,38 @@ mod test {
         "});
         let result = Transactions::try_from_reader(missing_fields);
         assert!(result.is_err(), "Expected parsing to fail when required fields are missing");
+    }
+
+    #[test]
+    fn test_to_json_empty() {
+        let sut = Transactions::new();
+        let json = sut.to_json().unwrap();
+        assert_eq!(json, r#"{"p":[]}"#);
+    }
+
+    #[test]
+    fn test_to_json_with_transactions() {
+        let sut = Transactions::try_from_reader(Cursor::new(indoc! {"
+            date;symbol;number;price;commision;currency
+            2000-01-01;FOO;1;42.42;4.2;BAR
+        "}))
+        .unwrap();
+        let json = sut.to_json().unwrap();
+        assert!(json.contains("FOO"));
+        assert!(json.contains("2000-01-01"));
+        assert!(json.contains("42.42"));
+    }
+
+    #[test]
+    fn test_to_json_roundtrip() {
+        let sut = Transactions::try_from_reader(Cursor::new(indoc! {"
+            date;symbol;number;price;commision;currency
+            2000-01-01;FOO;1;42.42;4.2;BAR
+            2000-01-02;BAZ;2;10.00;1.0;QUX
+        "}))
+        .unwrap();
+        let json = sut.to_json().unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["p"].as_array().unwrap().len(), 2);
     }
 }
