@@ -1,7 +1,12 @@
 use std::env;
 
-use axum::{Router, routing::get};
+use axum::{extract::State, Router, routing::get};
 use log::info;
+
+#[derive(Clone)]
+struct AppState {
+    message: String,
+}
 
 #[tokio::main]
 async fn main() {
@@ -11,7 +16,13 @@ async fn main() {
         None => "127.0.0.1:3000".to_string(),
     };
 
-    let app = Router::new().route("/", get(handler));
+    let state = AppState {
+        message: "Hello, World!\n".to_string(),
+    };
+
+    let app = Router::new()
+        .route("/", get(handler))
+        .with_state(state);
     let listener = tokio::net::TcpListener::bind(listen_addr).await.unwrap();
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())
@@ -19,9 +30,9 @@ async fn main() {
         .unwrap();
 }
 
-async fn handler() -> &'static str {
+async fn handler(State(state): State<AppState>) -> String {
     log::info!("GET / request received");
-    "Hello, World!\n"
+    state.message
 }
 
 async fn shutdown_signal() {
