@@ -4,6 +4,7 @@ use axum::{Router, routing::get};
 use log::info;
 
 async fn handler() -> &'static str {
+    log::info!("GET / request received");
     "Hello, World!\n"
 }
 
