@@ -1,11 +1,17 @@
 # My always unfinished transaction system
 
-## Use jenkins validation with pre-commit
+## What I want to do
 
-Set:
+- Load a transaction log from a csv file - done
+- Get quotes from Stooq
+- Evaluate - how the portfolio performs:
+  - Calculate daily return: (Value(t) - Value(t-1)) / Value(t-1).
+     Utilize static content, and if changes occur between periods, calculate “t-1” using “t” content.
+     If it changed in between, the "t-1" value is calculated usint "t" content.
+  - Draw a chart. Using annualized values and SMA smoothing.
 
-```shell
-export JENKINS_URL=https://your-jenkins-instance.com
-export JENKINS_USER=your-username
-export JENKINS_TOKEN=your-api-token
-```
+## Techstack
+
+- Rust
+- Polars
+- Webservice with axum
