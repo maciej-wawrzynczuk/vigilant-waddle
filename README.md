@@ -20,6 +20,9 @@
 ## Development workflow
 
 - `devel` is the main working branch.
-- Merging to `dev-build` triggers a GitHub Actions build that pushes the image to the Docker registry. Build status is visible in the repository's Actions tab.
-- Local deployment uses `docker compose up -d`.
+- Pushing to `main` or `dev-build` triggers a GitHub Actions workflow that
+  runs tests, builds the binary, and pushes the Docker image
+  (`maciekw/waddle-ws`) to Docker Hub. Build status is visible in the
+  repository's Actions tab.
+- Local deployment uses `docker compose up -d` (serves the UI on port 8080).
 - E2E tests can be run against the local deployment (implementation pending).
