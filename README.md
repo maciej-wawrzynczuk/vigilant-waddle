@@ -17,7 +17,9 @@
 - Polars
 - Webservice with axum
 
-## Test workflow
+## Development workflow
+
 - `devel` is the main working branch.
-- To build the test code, I merge it to `dev-build`. It builds using GitHub Actions and pushes the image to docker registry. How to monitor if it's successful?
-- Build a local deployment using `docker-compose`. How to test it automatically (e2e)?
+- Merging to `dev-build` triggers a GitHub Actions build that pushes the image to the Docker registry. Build status is visible in the repository's Actions tab.
+- Local deployment uses `docker compose up -d`.
+- E2E tests can be run against the local deployment (implementation pending).
