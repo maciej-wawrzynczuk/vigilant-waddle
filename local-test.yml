@@ -1,0 +1,24 @@
+---
+- name: Local test deployment
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+    - name: Build waddle-ws image
+      tags: [build]
+      containers.podman.podman_image:
+        name: waddle-ws
+        tag: local
+        path: .
+        build:
+          file: Dockerfile
+
+    - name: Build nginx-frontend image
+      tags: [build]
+      containers.podman.podman_image:
+        name: nginx-frontend
+        tag: local
+        path: .
+        build:
+          file: Dockerfile.nginx
