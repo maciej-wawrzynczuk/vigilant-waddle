@@ -13,7 +13,6 @@ that replaces the GitHub Actions workflow, using Ansible as the orchestrator.
 | Orchestration | Ansible | 2.17+ |
 | Ansible collection | containers.podman | 1.x+ |
 | Integration testing | hurl | 6.0 |
-| Entry point | GNU Make | any |
 
 ## Core Features
 
@@ -25,13 +24,14 @@ that replaces the GitHub Actions workflow, using Ansible as the orchestrator.
    the locally deployed services to verify upload and query endpoints.
 4. **Teardown** — Stop and remove all containers and the pod after tests
    complete, regardless of test outcome.
-5. **Single entry point** — A Makefile target (`make local-test`) that
-   invokes the full pipeline with one command.
+5. **Single entry point** — A single Ansible playbook invoked with
+   `ansible-playbook` that executes the full pipeline with one command.
 
 ## Acceptance Criteria
 
-1. `make local-test` builds images, starts containers, runs tests, and tears
-   down — all locally, with no external dependencies beyond the tech stack.
+1. `ansible-playbook local-test.yml` builds images, starts containers, runs
+   tests, and tears down — all locally, with no external dependencies beyond
+   the tech stack.
 2. The Rust backend `/transactions` PUT and GET endpoints pass hurl tests.
 3. The nginx frontend serves static files through the pod.
 4. Teardown leaves no running containers or dangling pods from the pipeline.
