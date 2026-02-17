@@ -8,6 +8,7 @@ use std::{
     path::Path,
 };
 
+#[allow(dead_code)]
 pub fn list_trans(p: &Path) -> anyhow::Result<()> {
     let f = File::open(p)?;
     let rd = BufReader::new(f);
@@ -22,10 +23,12 @@ pub fn list_trans(p: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
+#[allow(dead_code)]
 pub struct Portfolio {
     data: Vec<(String, i32)>,
 }
 
+#[allow(dead_code)]
 impl Portfolio {
     pub fn new() -> Self {
         Self {
@@ -52,6 +55,7 @@ impl Portfolio {
     }
 }
 
+#[allow(dead_code)]
 impl fmt::Display for Portfolio {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let entries: Vec<String> = self
@@ -95,10 +99,12 @@ impl Transactions {
         Self { p: Vec::new() }
     }
 
+    #[allow(dead_code)]
     pub fn to_json(&self) -> serde_json::Result<String> {
         serde_json::to_string(&self)
     }
 
+    #[allow(dead_code)]
     pub fn to_json_pretty(&self) -> serde_json::Result<String> {
         serde_json::to_string_pretty(&self)
     }
@@ -136,6 +142,7 @@ impl Transactions {
         }
     }
 
+    #[allow(dead_code)]
     pub fn iter(&self) -> impl Iterator<Item = &MyTransaction> + '_ {
         self.p.iter()
     }
