@@ -1,4 +1,4 @@
-# My always unfinished transaction system
+# My Always Unfinished Transaction System
 
 ## What I want to do
 
@@ -18,6 +18,6 @@
 - Webservice with axum
 
 ## Test workflow
-- 'devel' is the main working branch.
-- to build the test code - I merge it to 'dev-build'. It builds uses GH asctions and pushes the image to docker registry. How to monitor if it's succesfful?
-- build a local deployment using docker-compose. How to test it automatically? (e2e)
+- `devel` is the main working branch.
+- To build the test code, I merge it to `dev-build`. It builds using GitHub Actions and pushes the image to docker registry. How to monitor if it's successful?
+- Build a local deployment using `docker-compose`. How to test it automatically (e2e)?
