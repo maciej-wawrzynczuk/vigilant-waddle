@@ -51,3 +51,14 @@ Output: Test logs.
 - Stick to existing toolset and libraries until you’re asked.
   If you find a significantly better solution, ask.
 - Prefer debian-slim Docker images.
+
+## Ansible
+When write Ansbile code prefer a single playbook with tags system.
+Use tags to express tasks dependecies. For example:
+
+```yaml
+- name: Build
+  tags: [build, deploy]
+- name: Deploy
+  tags: [deploy]
+```
