@@ -51,7 +51,8 @@ jobs:
 
       - name: Install hurl
         run: |
-          curl -fsSL https://github.com/Orange-OpenSource/hurl/releases/latest/download/hurl_amd64.deb -o hurl.deb
+          VERSION=$(curl -fsSL https://api.github.com/repos/Orange-OpenSource/hurl/releases/latest | jq -r '.tag_name')
+          curl -fsSL "https://github.com/Orange-OpenSource/hurl/releases/download/${VERSION}/hurl_${VERSION}_amd64.deb" -o hurl.deb
           sudo dpkg -i hurl.deb
 
       - name: Start stack
