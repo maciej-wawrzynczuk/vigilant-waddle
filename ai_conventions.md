@@ -1,10 +1,10 @@
 # documentation standards
-- when writing to MD files always care about mardkdownlint compilance.
-- always corretct without promt: markdown format, spelling and grammar error.
-- give me sugestion about style
+- when writing to MD files always care about markdownlint compliance.
+- always correct without prompt: markdown format, spelling and grammar errors.
+- give me suggestions about style
 
 # code standards
 - Higher level functions first. Helper functions below.
 - Stick to existing toolset and libraries until you’re asked.
   If you find a significantly better solution, ask.
-- Prefer debian-slim docker images.
+- Prefer debian-slim Docker images.
