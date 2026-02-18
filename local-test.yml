@@ -24,7 +24,7 @@
           file: Dockerfile.nginx
 
     - name: Create waddle-test-pod
-      tags: [deploy, build]
+      tags: [deploy, build, test]
       containers.podman.podman_pod:
         name: waddle-test-pod
         state: started
@@ -32,7 +32,7 @@
           - "8080:80"
 
     - name: Start waddle-ws container
-      tags: [deploy, build]
+      tags: [deploy, build, test]
       containers.podman.podman_container:
         name: waddle-ws
         image: waddle-ws:local
@@ -43,7 +43,7 @@
           RUST_LOG: info
 
     - name: Start nginx-frontend container
-      tags: [deploy, build]
+      tags: [deploy, build, test]
       containers.podman.podman_container:
         name: nginx-frontend
         image: nginx-frontend:local
@@ -51,7 +51,7 @@
         pod: waddle-test-pod
 
     - name: Wait for backend health
-      tags: [deploy]
+      tags: [deploy, test]
       ansible.builtin.uri:
         url: http://localhost:8080/api/transactions
         method: GET
