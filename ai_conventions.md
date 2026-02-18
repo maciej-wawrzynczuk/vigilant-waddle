@@ -3,6 +3,7 @@
 The work is divided to "cycles". Every cycle has "stages". If you not sure
 in which cycle and stage are we - ask. Do not go to the next part yourself
 cycles documantation are subdirectories of "doc" directory.
+Include cycle, stage and phase in every commit notes.
 
 ## stages
 
@@ -33,7 +34,9 @@ It section refers to a core feature from SPEC an contain:
 
 ### Coding.
 Input : PLAN.md
-Output: Actual code
+Output: Actual code, BUILD-ISSUES.md
+While fixing problems - write notes in BUILD-ISSUES - What was the problem
+and how it was fixed.
 
 ### Acceptance
 Input: SPEC.md, PLAN.md
