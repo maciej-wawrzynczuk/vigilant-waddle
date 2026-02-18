@@ -67,6 +67,5 @@
     - name: Run integration tests
       tags: [test, deploy]
       ansible.builtin.shell:
-        cmd: hurl --test tests/e2e/*.hurl --variable host=http://127.0.0.1:8080
-        chdir: "{{ playbook_dir }}"
+        cmd: hurl --test --file-root tests/e2e tests/e2e/*.hurl --variable host=http://127.0.0.1:8080
       changed_when: false
