@@ -30,6 +30,7 @@
         state: started
         ports:
           - "8080:80"
+        recreate: true
 
     - name: Start waddle-ws container
       tags: [deploy, build, test]
@@ -38,6 +39,7 @@
         image: waddle-ws:local
         state: started
         pod: waddle-test-pod
+        recreate: true
         env:
           WADDLE_LISTEN_PORT: "127.0.0.1:3000"
           RUST_LOG: info
@@ -49,6 +51,7 @@
         image: nginx-frontend:local
         state: started
         pod: waddle-test-pod
+        recreate: true
 
     - name: Wait for backend health
       tags: [deploy, test]
