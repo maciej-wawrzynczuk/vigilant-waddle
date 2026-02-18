@@ -19,7 +19,7 @@
 
 | File | Action |
 |------|--------|
-| `ansible.cfg` | Create — inventory and settings |
+| `ansible.cfg` | Create — default settings |
 | `local-test.yml` | Create — playbook skeleton + build tasks |
 | `Dockerfile` | Existing — builds Rust backend |
 | `Dockerfile.nginx` | Create — nginx image with static files and pod config |
@@ -28,7 +28,7 @@
 
 ### Implementation Plan
 
-1. Create `ansible.cfg` with `inventory = localhost,` and `host_key_checking = False`.
+1. Create `ansible.cfg` with `host_key_checking = False`.
 2. Create `local-test.yml` with `hosts: localhost`, `connection: local`, `gather_facts: false`.
 3. Create `nginx/nginx-pod.conf` — copy `nginx/nginx.conf`, change `proxy_pass` to `http://127.0.0.1:3000/;`.
 4. Create `Dockerfile.nginx` based on `nginx:alpine`. Copy `nginx/html` and `nginx/nginx-pod.conf` (as `/etc/nginx/conf.d/default.conf`).
