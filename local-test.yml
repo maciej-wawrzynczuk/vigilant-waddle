@@ -60,3 +60,16 @@
       until: result is not failed
       retries: 10
       delay: 2
+
+    - name: Install hurl
+      tags: [test, deploy]
+      become: true
+      ansible.builtin.apt:
+        deb: https://github.com/Orange-OpenSource/hurl/releases/download/6.1.1/hurl_6.1.1_amd64.deb
+        state: present
+
+    - name: Run integration tests
+      tags: [test, deploy]
+      ansible.builtin.command:
+        cmd: hurl --test tests/integration/*.hurl --variable host=http://localhost:8080
+      changed_when: false
