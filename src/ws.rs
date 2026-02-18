@@ -46,6 +46,7 @@ async fn upload_transactions(
     State(state): State<AppState>,
     mut multipart: Multipart,
 ) -> (axum::http::StatusCode, String) {
+    log::info!("Received upload_transactions request");
     let mut all_data = Vec::new();
     let mut field_count = 0;
 
@@ -94,6 +95,7 @@ async fn upload_transactions(
 }
 
 async fn get_transactions(State(state): State<AppState>) -> (axum::http::StatusCode, String) {
+    log::info!("Received get_transactions request");
     let guard = state.transactions.lock().unwrap();
     match &*guard {
         Some(transactions) => match transactions.to_json() {
