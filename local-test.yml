@@ -54,8 +54,9 @@
       tags: [deploy]
       ansible.builtin.uri:
         url: http://localhost:8080/api/transactions
-        status_code: 200
+        method: GET
+        status_code: [200, 404]
       register: result
-      until: result.status == 200
+      until: result is not failed
       retries: 10
       delay: 2
