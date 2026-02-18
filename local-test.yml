@@ -56,7 +56,7 @@
     - name: Wait for backend health
       tags: [deploy, test]
       ansible.builtin.uri:
-        url: http://localhost:8080/api/transactions
+        url: http://127.0.0.1:8080/api/transactions
         method: GET
         status_code: [200, 404]
       register: result
@@ -67,5 +67,5 @@
     - name: Run integration tests
       tags: [test, deploy]
       ansible.builtin.shell:
-        cmd: hurl --test tests/e2e/*.hurl --variable host=http://localhost:8080
+        cmd: hurl --test tests/e2e/*.hurl --variable host=http://127.0.0.1:8080
       changed_when: false
