@@ -22,3 +22,40 @@
         path: .
         build:
           file: Dockerfile.nginx
+
+    - name: Create waddle-test-pod
+      tags: [deploy, build]
+      containers.podman.podman_pod:
+        name: waddle-test-pod
+        state: started
+        ports:
+          - "8080:80"
+
+    - name: Start waddle-ws container
+      tags: [deploy, build]
+      containers.podman.podman_container:
+        name: waddle-ws
+        image: waddle-ws:local
+        state: started
+        pod: waddle-test-pod
+        env:
+          WADDLE_LISTEN_PORT: "127.0.0.1:3000"
+          RUST_LOG: info
+
+    - name: Start nginx-frontend container
+      tags: [deploy, build]
+      containers.podman.podman_container:
+        name: nginx-frontend
+        image: nginx-frontend:local
+        state: started
+        pod: waddle-test-pod
+
+    - name: Wait for backend health
+      tags: [deploy]
+      ansible.builtin.uri:
+        url: http://localhost:8080/api/transactions
+        status_code: 200
+      register: result
+      until: result.status == 200
+      retries: 10
+      delay: 2
