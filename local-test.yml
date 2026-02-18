@@ -64,5 +64,5 @@
     - name: Run integration tests
       tags: [test, deploy]
       ansible.builtin.command:
-        cmd: hurl --test tests/integration/*.hurl --variable host=http://localhost:8080
+        cmd: hurl --test tests/e2e/*.hurl --variable host=http://localhost:8080
       changed_when: false
