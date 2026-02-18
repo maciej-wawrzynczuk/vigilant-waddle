@@ -11,3 +11,19 @@
 - `ansible.cfg` — kept minimal (only `host_key_checking = False`)
 
 **Cycle/Stage/Phase:** local_test / Planning / Section 1
+
+---
+
+## Issue 2: Podman short-name ambiguity in Dockerfiles
+
+**Problem:** Both `Dockerfile` and `Dockerfile.nginx` used short-name base images (`debian:bookworm-slim` and `nginx:alpine`). On systems without cached images, Podman prompts for registry selection, breaking automated builds.
+
+**Solution:** Changed both Dockerfiles to use fully-qualified image names:
+- `debian:bookworm-slim` → `docker.io/library/debian:bookworm-slim`
+- `nginx:alpine` → `docker.io/library/nginx:alpine`
+
+**Files affected:**
+- `Dockerfile` — updated FROM directive
+- `Dockerfile.nginx` — updated FROM directive
+
+**Cycle/Stage/Phase:** local_test / Coding / Section 1
