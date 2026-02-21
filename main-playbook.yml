@@ -1,0 +1,19 @@
+# vim: ft=yaml.ansible
+---
+- name: A test
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    test_image: "localhost/waddle:test"
+
+  tasks:
+    - name: Build release binary
+      ansible.builtin.command: cargo build --bin waddle-ws
+      changed_when: true
+
+    - name: Build image
+      community.docker.docker_image_build:
+        name: "{{ test_image }}"
+        path: "{{ playbook_dir }}"

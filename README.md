@@ -19,4 +19,5 @@
 
 ## The plan
 
-- [ ] Make Docker build locally
+- [x] Make Docker build locally
+- [x] Do it with ansible
