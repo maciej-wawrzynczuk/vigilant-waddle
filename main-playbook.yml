@@ -11,9 +11,21 @@
   tasks:
     - name: Build release binary
       ansible.builtin.command: cargo build --bin waddle-ws
-      changed_when: true
+      changed_when: false
 
     - name: Build image
       community.docker.docker_image_build:
         name: "{{ test_image }}"
         path: "{{ playbook_dir }}"
+
+    - name: Spin up the container
+      community.docker.docker_container:
+        image: "{{ test_image }}"
+        name: "test_waddle"
+        ports:
+          - 3000:3000
+
+    - name: Wait for the service
+      ansible.builtin.wait_for:
+        host: localhost
+        port: 3000
