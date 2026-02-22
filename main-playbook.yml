@@ -6,7 +6,7 @@
   gather_facts: false
 
   vars:
-    test_image: "localhost/waddle:test"
+    test_image: "localhost/waddle-test"
 
   tasks:
     - name: Build release binary
@@ -18,14 +18,22 @@
         name: "{{ test_image }}"
         path: "{{ playbook_dir }}"
 
-    - name: Spin up the container
-      community.docker.docker_container:
-        image: "{{ test_image }}"
-        name: "test_waddle"
-        ports:
-          - 3000:3000
+    - name: Run an test
+      block:
+        - name: Spin up the container
+          community.docker.docker_container:
+            image: "{{ test_image }}"
+            name: "test_waddle"
+            ports:
+              - 3000:3000
 
-    - name: Wait for the service
-      ansible.builtin.wait_for:
-        host: localhost
-        port: 3000
+        - name: Wait for the service
+          ansible.builtin.wait_for:
+            host: localhost
+            port: 3000
+            timeout: 10
+      always:
+        - name: Cleanup
+          community.docker.docker_container:
+            name: "test_waddle"
+            state: absent

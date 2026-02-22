@@ -23,11 +23,14 @@
 - [x] Do it with ansible
 - [ ] Learn naming and tagging docker images in ansible
 - [ ] Add cleanup code to the playbook.
+- [ ] Create get transactions handler
 
 ## Ideas
+
 ### Smaller image
 
 It uses debian slim and tini now. Consider ideas:
+
 - Add tini to distroless
 - Add ctrl-c handler to rust code
 - Musl build
