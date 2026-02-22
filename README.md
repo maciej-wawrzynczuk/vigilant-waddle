@@ -21,8 +21,9 @@
 
 - [x] Make Docker build locally
 - [x] Do it with ansible
-- [ ] Learn naming and tagging docker images in ansible
-- [ ] Add cleanup code to the playbook.
+- [x] Learn naming and tagging docker images in ansible
+- [x] Add cleanup code to the playbook.
+- [ ] Review ai transaction to yaml code
 - [ ] Create get transactions handler
 
 ## Ideas

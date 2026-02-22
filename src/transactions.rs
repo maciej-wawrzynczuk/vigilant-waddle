@@ -104,11 +104,6 @@ impl Transactions {
         serde_json::to_string(&self)
     }
 
-    #[allow(dead_code)]
-    pub fn to_json_pretty(&self) -> serde_json::Result<String> {
-        serde_json::to_string_pretty(&self)
-    }
-
     pub fn try_from_reader<R: Read>(rd: R) -> csv::Result<Self> {
         let mut rdr = csv::ReaderBuilder::new()
             .delimiter(b';')
