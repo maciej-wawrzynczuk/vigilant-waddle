@@ -1,13 +1,12 @@
 mod transactions;
-use axum::Router;
+use axum::{Router, extract::State};
 use std::env;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{filter::EnvFilter, fmt, prelude::*};
 
-fn create_app() -> Router {
-    Router::new()
-        .route("/hello", axum::routing::get(hello_handler))
-        .layer(TraceLayer::new_for_http())
+#[derive(Clone, Debug)]
+struct HelloMsg {
+    msg: String,
 }
 
 #[tokio::main]
@@ -28,6 +27,16 @@ async fn main() {
     axum::serve(listener, app).await.unwrap();
 }
 
-async fn hello_handler() -> &'static str {
-    "Hello World!"
+async fn hello_handler(State(s): State<HelloMsg>) -> String {
+    s.msg
+}
+
+fn create_app() -> Router {
+    let s = HelloMsg {
+        msg: "Hello World!".to_string(),
+    };
+    Router::new()
+        .route("/hello", axum::routing::get(hello_handler))
+        .layer(TraceLayer::new_for_http())
+        .with_state(s)
 }
