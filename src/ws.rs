@@ -1,12 +1,17 @@
 mod transactions;
-use axum::{Router, extract::State};
-use std::env;
+use axum::{Json, Router, extract::State};
+use std::{
+    env,
+    sync::{Arc, Mutex},
+};
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{filter::EnvFilter, fmt, prelude::*};
+use transactions::Transactions;
 
 #[derive(Clone, Debug)]
-struct HelloMsg {
+struct AppState {
     msg: String,
+    transactions: Arc<Mutex<Transactions>>,
 }
 
 #[tokio::main]
@@ -27,16 +32,23 @@ async fn main() {
     axum::serve(listener, app).await.unwrap();
 }
 
-async fn hello_handler(State(s): State<HelloMsg>) -> String {
+async fn hello_handler(State(s): State<AppState>) -> String {
     s.msg
 }
 
+async fn get_tranasactions(State(s): State<AppState>) -> Json<Transactions> {
+    let data = s.transactions.lock().unwrap();
+    Json(data.clone())
+}
+
 fn create_app() -> Router {
-    let s = HelloMsg {
+    let s = AppState {
         msg: "Hello World!".to_string(),
+        transactions: Arc::new(Mutex::new(Transactions::new())),
     };
     Router::new()
         .route("/hello", axum::routing::get(hello_handler))
+        .route("/transactions", axum::routing::get(get_tranasactions))
         .layer(TraceLayer::new_for_http())
         .with_state(s)
 }

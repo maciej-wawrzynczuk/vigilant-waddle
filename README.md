@@ -23,7 +23,9 @@
 - [x] Do it with ansible
 - [x] Learn naming and tagging docker images in ansible
 - [x] Add cleanup code to the playbook.
-- [ ] Review ai transaction to yaml code
+- [x] Review ai transaction to yaml code
+- [x] learn server state
+- [ ] upload transactions
 - [ ] Create get transactions handler
 
 ## Ideas
