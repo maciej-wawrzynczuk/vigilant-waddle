@@ -26,7 +26,8 @@
 - [x] Review ai transaction to yaml code
 - [x] learn server state
 - [ ] upload transactions
-- [ ] Create get transactions handler
+- [x] Create get transactions handler
+- [ ] Create a frontend
 
 ## Ideas
 

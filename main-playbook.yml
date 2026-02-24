@@ -11,12 +11,13 @@
   tasks:
     - name: Build release binary
       ansible.builtin.command: cargo build --bin waddle-ws
-      changed_when: false
+      changed_when: true
 
     - name: Build image
       community.docker.docker_image_build:
         name: "{{ test_image }}"
         path: "{{ playbook_dir }}"
+        rebuild: always
 
     - name: Run an test
       block:
@@ -32,6 +33,11 @@
             host: localhost
             port: 3000
             timeout: 10
+
+        - name: Test with hurl
+          ansible.builtin.command: hurl --test hurl/
+          changed_when: false
+
       always:
         - name: Cleanup
           community.docker.docker_container:
