@@ -19,6 +19,11 @@
 
 ## The plan
 
+### Transaction log
+
+- Import from CSV
+- Display
+
 - [x] Make Docker build locally
 - [x] Do it with ansible
 - [x] Learn naming and tagging docker images in ansible
@@ -28,6 +33,18 @@
 - [ ] upload transactions
 - [x] Create get transactions handler
 - [ ] Create a frontend
+
+### Portfolio
+
+- Replay transaction log a show the current one
+
+### Quotes
+
+- Import quotes from Stooq?
+- Save to file
+- Lookup
+
+### Evaluate portfolio
 
 ## Ideas
 

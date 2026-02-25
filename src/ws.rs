@@ -1,10 +1,16 @@
 mod transactions;
-use axum::{Json, Router, extract::State};
+use axum::{
+    Json, Router,
+    extract::{Multipart, State},
+};
+use http::StatusCode;
 use std::{
     env,
+    io::Cursor,
     sync::{Arc, Mutex},
 };
 use tower_http::trace::TraceLayer;
+use tracing::error;
 use tracing_subscriber::{filter::EnvFilter, fmt, prelude::*};
 use transactions::Transactions;
 
@@ -41,6 +47,35 @@ async fn get_tranasactions(State(s): State<AppState>) -> Json<Transactions> {
     Json(data.clone())
 }
 
+async fn post_transactions(
+    State(mut s): State<AppState>,
+    mut data: Multipart,
+) -> Result<(), StatusCode> {
+    while let Some(f) = data.next_field().await.map_err(|_| {
+        error!("Multipart error");
+        StatusCode::BAD_REQUEST
+    })? {
+        if let Some(name) = f.name() {
+            if name == "transaction_log" {
+                let csv = f
+                    .bytes()
+                    .await
+                    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+                let csv_c = Cursor::new(csv);
+                s.transactions = Arc::new(Mutex::new(
+                    Transactions::try_from_reader(csv_c).map_err(|e| {
+                        error!("CSV read error: {e}");
+                        StatusCode::BAD_REQUEST
+                    })?,
+                ));
+                return Ok(());
+            }
+        }
+    }
+    error!("No transaction_log field in the request");
+    Err(StatusCode::BAD_REQUEST)
+}
+
 fn create_app() -> Router {
     let s = AppState {
         msg: "Hello World!".to_string(),
@@ -49,6 +84,7 @@ fn create_app() -> Router {
     Router::new()
         .route("/hello", axum::routing::get(hello_handler))
         .route("/transactions", axum::routing::get(get_tranasactions))
+        .route("/transactions", axum::routing::post(post_transactions))
         .layer(TraceLayer::new_for_http())
         .with_state(s)
 }
