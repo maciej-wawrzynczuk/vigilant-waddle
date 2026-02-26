@@ -1,4 +1,3 @@
-mod transactions;
 use axum::{
     Json, Router,
     extract::{Multipart, State},
@@ -12,7 +11,7 @@ use std::{
 use tower_http::trace::TraceLayer;
 use tracing::{error, info};
 use tracing_subscriber::{filter::EnvFilter, fmt, prelude::*};
-use transactions::Transactions;
+use vigilant_waddle::transactions::Transactions;
 
 #[derive(Clone, Debug)]
 struct AppState {

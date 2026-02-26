@@ -8,7 +8,6 @@ use std::{
     path::Path,
 };
 
-#[allow(dead_code)]
 pub fn list_trans(p: &Path) -> anyhow::Result<()> {
     let f = File::open(p)?;
     let rd = BufReader::new(f);
@@ -23,12 +22,10 @@ pub fn list_trans(p: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[allow(dead_code)]
 pub struct Portfolio {
     data: Vec<(String, i32)>,
 }
 
-#[allow(dead_code)]
 impl Portfolio {
     pub fn new() -> Self {
         Self {
@@ -55,7 +52,6 @@ impl Portfolio {
     }
 }
 
-#[allow(dead_code)]
 impl fmt::Display for Portfolio {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let entries: Vec<String> = self
@@ -66,7 +62,6 @@ impl fmt::Display for Portfolio {
     }
 }
 
-#[allow(dead_code)]
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct MyTransaction {
     // date;symbol;number;price;commision;currency
@@ -95,12 +90,10 @@ pub struct Transactions {
 }
 
 impl Transactions {
-    #[allow(dead_code)]
     pub fn new() -> Self {
         Self { p: Vec::new() }
     }
 
-    #[allow(dead_code)]
     pub fn to_json(&self) -> serde_json::Result<String> {
         serde_json::to_string(&self)
     }
@@ -130,7 +123,6 @@ impl Transactions {
         Ok(Self { p: v })
     }
 
-    #[allow(dead_code)]
     pub fn my_days_iter(&self) -> Box<dyn Iterator<Item = NaiveDate> + '_> {
         match (self.first_date(), self.last_date()) {
             (Some(start), Some(end)) => Box::new(start.iter_days().take_while(move |d| d <= end)),
@@ -138,7 +130,6 @@ impl Transactions {
         }
     }
 
-    #[allow(dead_code)]
     pub fn iter(&self) -> impl Iterator<Item = &MyTransaction> + '_ {
         self.p.iter()
     }
@@ -151,7 +142,6 @@ impl Transactions {
         self.p.iter().max_by_key(|x| x.date).map(|x| &x.date)
     }
 
-    #[allow(dead_code)]
     pub fn trans_by_date<'a>(
         &'a self,
         d: &'a NaiveDate,

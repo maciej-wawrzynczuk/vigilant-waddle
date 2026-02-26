@@ -1,10 +1,10 @@
 mod dataframe;
 mod stooq_download;
-mod transactions;
 
 use std::path::PathBuf;
 
 use crate::{dataframe::load_csv, stooq_download::stooq_download};
+use vigilant_waddle::transactions;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -56,7 +56,7 @@ async fn main() -> Result<()> {
             println!("{df}");
         }
         Some(Commands::Transactions { file }) => {
-            crate::transactions::list_trans(file)?;
+            transactions::list_trans(file)?;
         }
 
         None => {}
