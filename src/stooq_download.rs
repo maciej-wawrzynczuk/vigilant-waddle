@@ -20,7 +20,7 @@ pub async fn stooq_download(symbol: &str) -> Result<PathBuf> {
     );
     let dir = path
         .parent()
-        .with_context(|| format!("Something wrong with {:?}", path))?;
+        .with_context(|| format!("Something wrong with {}", path.to_string_lossy()))?;
     create_dir_all(dir).await?;
     let f = File::create(&path).await?;
 

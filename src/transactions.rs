@@ -7,8 +7,9 @@ use std::{
     io::{BufReader, Read},
     path::Path,
 };
-
-#[allow(dead_code)]
+/// # Errors
+///
+/// Propagates Err from `Transactions::try_from_reader`
 pub fn list_trans(p: &Path) -> anyhow::Result<()> {
     let f = File::open(p)?;
     let rd = BufReader::new(f);
@@ -28,8 +29,14 @@ pub struct Portfolio {
     data: Vec<(String, i32)>,
 }
 
-#[allow(dead_code)]
+impl Default for Portfolio {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Portfolio {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             data: Vec::<(String, i32)>::new(),
@@ -40,6 +47,7 @@ impl Portfolio {
         self.data.iter().map(|p| p.0.as_str())
     }
 
+    #[must_use]
     pub fn amount(&self, symbol: &str) -> i32 {
         match self.data.iter().find(|t| t.0 == symbol) {
             Some(n) => n.1,
@@ -66,8 +74,7 @@ impl fmt::Display for Portfolio {
     }
 }
 
-#[allow(dead_code)]
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct MyTransaction {
     // date;symbol;number;price;commision;currency
     pub date: NaiveDate,
@@ -88,27 +95,30 @@ impl fmt::Display for MyTransaction {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
+#[serde(transparent)]
 pub struct Transactions {
     p: Vec<MyTransaction>,
 }
 
+impl Default for Transactions {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Transactions {
-    #[allow(dead_code)]
+    #[must_use]
     pub fn new() -> Self {
         Self { p: Vec::new() }
     }
 
-    #[allow(dead_code)]
-    pub fn to_json(&self) -> serde_json::Result<String> {
-        serde_json::to_string(&self)
-    }
-
-    #[allow(dead_code)]
-    pub fn to_json_pretty(&self) -> serde_json::Result<String> {
-        serde_json::to_string_pretty(&self)
-    }
-
+    /// # Errors
+    ///
+    /// Fails when:
+    /// - Unable to find headers
+    /// - Has bad haders
+    /// - Hit format errors.
     pub fn try_from_reader<R: Read>(rd: R) -> csv::Result<Self> {
         let mut rdr = csv::ReaderBuilder::new()
             .delimiter(b';')
@@ -118,7 +128,9 @@ impl Transactions {
         // Validate headers
         let headers = rdr.headers()?;
         let expected = ["date", "symbol", "number", "price", "commision", "currency"];
-        if headers.len() != expected.len() || !expected.iter().zip(headers.iter()).all(|(e, h)| e == &h) {
+        if headers.len() != expected.len()
+            || !expected.iter().zip(headers.iter()).all(|(e, h)| e == &h)
+        {
             return Err(csv::Error::from(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 "Invalid CSV headers",
@@ -132,7 +144,7 @@ impl Transactions {
         Ok(Self { p: v })
     }
 
-    #[allow(dead_code)]
+    #[must_use]
     pub fn my_days_iter(&self) -> Box<dyn Iterator<Item = NaiveDate> + '_> {
         match (self.first_date(), self.last_date()) {
             (Some(start), Some(end)) => Box::new(start.iter_days().take_while(move |d| d <= end)),
@@ -145,15 +157,16 @@ impl Transactions {
         self.p.iter()
     }
 
+    #[must_use]
     pub fn first_date(&self) -> Option<&NaiveDate> {
         self.p.iter().min_by_key(|x| x.date).map(|x| &x.date)
     }
 
+    #[must_use]
     pub fn last_date(&self) -> Option<&NaiveDate> {
         self.p.iter().max_by_key(|x| x.date).map(|x| &x.date)
     }
 
-    #[allow(dead_code)]
     pub fn trans_by_date<'a>(
         &'a self,
         d: &'a NaiveDate,
@@ -307,7 +320,10 @@ mod test {
             2000-01-01,FOO,1,42.42,4.2,BAR
         "});
         let result = Transactions::try_from_reader(wrong_delimiter);
-        assert!(result.is_err(), "Expected parsing to fail with wrong delimiter");
+        assert!(
+            result.is_err(),
+            "Expected parsing to fail with wrong delimiter"
+        );
     }
 
     #[test]
@@ -317,39 +333,9 @@ mod test {
             2000-01-01;FOO
         "});
         let result = Transactions::try_from_reader(missing_fields);
-        assert!(result.is_err(), "Expected parsing to fail when required fields are missing");
-    }
-
-    #[test]
-    fn test_to_json_empty() {
-        let sut = Transactions::new();
-        let json = sut.to_json().unwrap();
-        assert_eq!(json, r#"{"p":[]}"#);
-    }
-
-    #[test]
-    fn test_to_json_with_transactions() {
-        let sut = Transactions::try_from_reader(Cursor::new(indoc! {"
-            date;symbol;number;price;commision;currency
-            2000-01-01;FOO;1;42.42;4.2;BAR
-        "}))
-        .unwrap();
-        let json = sut.to_json().unwrap();
-        assert!(json.contains("FOO"));
-        assert!(json.contains("2000-01-01"));
-        assert!(json.contains("42.42"));
-    }
-
-    #[test]
-    fn test_to_json_roundtrip() {
-        let sut = Transactions::try_from_reader(Cursor::new(indoc! {"
-            date;symbol;number;price;commision;currency
-            2000-01-01;FOO;1;42.42;4.2;BAR
-            2000-01-02;BAZ;2;10.00;1.0;QUX
-        "}))
-        .unwrap();
-        let json = sut.to_json().unwrap();
-        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
-        assert_eq!(parsed["p"].as_array().unwrap().len(), 2);
+        assert!(
+            result.is_err(),
+            "Expected parsing to fail when required fields are missing"
+        );
     }
 }

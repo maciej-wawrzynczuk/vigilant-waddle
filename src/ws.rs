@@ -1,9 +1,23 @@
-use std::env;
-use std::sync::{Arc, Mutex};
+use axum::{
+    Json, Router,
+    extract::{Multipart, State},
+};
+use http::StatusCode;
+use std::{
+    env,
+    io::Cursor,
+    sync::{Arc, Mutex},
+};
+use tower_http::trace::TraceLayer;
+use tracing::{error, info};
+use tracing_subscriber::{filter::EnvFilter, fmt, prelude::*};
+use vigilant_waddle::transactions::Transactions;
 
-use axum::{extract::State, Router};
-use axum::extract::Multipart;
-use log::info;
+#[derive(Clone, Debug)]
+struct AppState {
+    msg: String,
+    transactions: Arc<Mutex<Transactions>>,
+}
 
 use crate::transactions::Transactions;
 
@@ -24,81 +38,75 @@ fn create_app(state: AppState) -> Router {
 
 #[tokio::main]
 async fn main() {
-    env_logger::init();
-    let listen_addr = match env::var_os("WADDLE_LISTEN_PORT") {
+    tracing_subscriber::registry()
+        .with(fmt::layer())
+        .with(EnvFilter::from_default_env())
+        .init();
+
+    let listen_addr = match env::var_os("WADDLE_LISTEN_ADDR") {
         Some(a) => a.into_string().unwrap(),
         None => "127.0.0.1:3000".to_string(),
     };
 
-    let state = AppState {
-        transactions: Arc::new(Mutex::new(None)),
+    let app = create_app();
+    let listener = tokio::net::TcpListener::bind(&listen_addr).await.unwrap();
+    println!("Listenin on http://{listen_addr}");
+    axum::serve(listener, app).await.unwrap();
+}
+
+async fn hello_handler(State(s): State<AppState>) -> String {
+    s.msg
+}
+
+async fn get_tranasactions(State(s): State<AppState>) -> Json<Transactions> {
+    let data = s.transactions.lock().unwrap();
+    Json(data.clone())
+}
+
+async fn post_transactions(
+    State(s): State<AppState>,
+    mut data: Multipart,
+) -> Result<(), StatusCode> {
+    while let Some(f) = data.next_field().await.map_err(|_| {
+        error!("Multipart error");
+        StatusCode::BAD_REQUEST
+    })? {
+        if let Some(name) = f.name()
+            && name == "transaction_log"
+        {
+            let csv = f
+                .bytes()
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            let csv_c = Cursor::new(csv);
+            let t = Transactions::try_from_reader(csv_c).map_err(|e| {
+                error!("CSV read error: {e}");
+                StatusCode::BAD_REQUEST
+            })?;
+            info!("{} loaded", t.iter().count());
+            let mut guard = s
+                .transactions
+                .lock()
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            *guard = t;
+            return Ok(());
+        }
+    }
+    error!("No transaction_log field in the request");
+    Err(StatusCode::BAD_REQUEST)
+}
+
+fn create_app() -> Router {
+    let s = AppState {
+        msg: "Hello World!".to_string(),
+        transactions: Arc::new(Mutex::new(Transactions::new())),
     };
-
-    let app = create_app(state);
-    let listener = tokio::net::TcpListener::bind(listen_addr).await.unwrap();
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal())
-        .await
-        .unwrap();
-}
-
-async fn upload_transactions(
-    State(state): State<AppState>,
-    mut multipart: Multipart,
-) -> (axum::http::StatusCode, String) {
-    let mut all_data = Vec::new();
-    let mut field_count = 0;
-    
-    while let Ok(Some(field)) = multipart.next_field().await {
-        field_count += 1;
-        
-        let data = match field.bytes().await {
-            Ok(d) => d,
-            Err(e) => return (axum::http::StatusCode::BAD_REQUEST, format!("Failed to read bytes: {}\n", e)),
-        };
-        
-        all_data.extend_from_slice(&data);
-    }
-    
-    if field_count == 0 {
-        return (axum::http::StatusCode::BAD_REQUEST, "No file provided\n".to_string());
-    }
-    
-    let cursor = std::io::Cursor::new(all_data);
-    
-    match Transactions::try_from_reader(cursor) {
-        Ok(transactions) => {
-            *state.transactions.lock().unwrap() = Some(transactions);
-            log::info!("Transactions uploaded successfully");
-            (axum::http::StatusCode::OK, "Transactions uploaded successfully\n".to_string())
-        }
-        Err(e) => {
-            log::error!("Failed to parse transactions: {}", e);
-            (axum::http::StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to parse CSV: {}\n", e))
-        }
-    }
-}
-
-async fn get_transactions(
-    State(state): State<AppState>,
-) -> (axum::http::StatusCode, String) {
-    let guard = state.transactions.lock().unwrap();
-    match &*guard {
-        Some(transactions) => {
-            match transactions.to_json() {
-                Ok(json) => (axum::http::StatusCode::OK, json),
-                Err(e) => (axum::http::StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to serialize: {}\n", e)),
-            }
-        }
-        None => (axum::http::StatusCode::NOT_FOUND, "No transactions uploaded\n".to_string()),
-    }
-}
-
-async fn shutdown_signal() {
-    tokio::signal::ctrl_c()
-        .await
-        .expect("Failed to install Ctrl-c handler");
-    info!("Ctr-c pressed");
+    Router::new()
+        .route("/hello", axum::routing::get(hello_handler))
+        .route("/transactions", axum::routing::get(get_tranasactions))
+        .route("/transactions", axum::routing::post(post_transactions))
+        .layer(TraceLayer::new_for_http())
+        .with_state(s)
 }
 
 #[cfg(test)]
