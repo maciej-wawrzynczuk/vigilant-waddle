@@ -30,9 +30,9 @@
 - [x] Add cleanup code to the playbook.
 - [x] Review ai transaction to yaml code
 - [x] learn server state
-- [ ] upload transactions
 - [x] Create get transactions handler
-- [ ] Create a frontend
+- [x] upload transactions
+- [ ] create a e2e test to see if transactions works.
 
 ### Portfolio
 

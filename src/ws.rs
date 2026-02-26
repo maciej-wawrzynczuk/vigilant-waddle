@@ -10,7 +10,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 use tower_http::trace::TraceLayer;
-use tracing::error;
+use tracing::{error, info};
 use tracing_subscriber::{filter::EnvFilter, fmt, prelude::*};
 use transactions::Transactions;
 
@@ -48,7 +48,7 @@ async fn get_tranasactions(State(s): State<AppState>) -> Json<Transactions> {
 }
 
 async fn post_transactions(
-    State(mut s): State<AppState>,
+    State(s): State<AppState>,
     mut data: Multipart,
 ) -> Result<(), StatusCode> {
     while let Some(f) = data.next_field().await.map_err(|_| {
@@ -62,12 +62,16 @@ async fn post_transactions(
                     .await
                     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
                 let csv_c = Cursor::new(csv);
-                s.transactions = Arc::new(Mutex::new(
-                    Transactions::try_from_reader(csv_c).map_err(|e| {
-                        error!("CSV read error: {e}");
-                        StatusCode::BAD_REQUEST
-                    })?,
-                ));
+                let t = Transactions::try_from_reader(csv_c).map_err(|e| {
+                    error!("CSV read error: {e}");
+                    StatusCode::BAD_REQUEST
+                })?;
+                info!("{} loaded", t.iter().count());
+                let mut guard = s
+                    .transactions
+                    .lock()
+                    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+                *guard = t;
                 return Ok(());
             }
         }
