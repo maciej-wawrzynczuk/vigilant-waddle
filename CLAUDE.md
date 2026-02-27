@@ -6,14 +6,11 @@ code in this repository.
 ## Build, Lint, and Test
 
 ```bash
-# Build debug binary
-cargo build
+# Build webservice binary
+cargo build --bin waddle-ws
 
 # Build release binary
 cargo build --release
-
-# Build webservice binary
-cargo build --bin waddle-ws
 
 # Format code
 cargo fmt
@@ -39,26 +36,20 @@ ansible-playbook main-playbook.yml
 
 ## Architecture
 
-This is a Rust financial portfolio transaction system. The library is exposed
-via two binaries:
+This is a Rust financial portfolio transaction system exposed as a REST API.
 
-- **`waddle`** (`src/main.rs`): CLI with three subcommands —
-  `stooq --symbol TICKER` (download quotes), `dataframe --symbol TICKER`
-  (display CSV data), `transactions --file PATH` (parse and show portfolio).
-- **`waddle-ws`** (`src/ws.rs`): Axum REST API server. Two endpoints:
-  - `PUT /transactions` — upload CSV (multipart form data), stored in `Arc<Mutex<Option<Transactions>>>`
-  - `GET /transactions` — retrieve as JSON
+**`waddle-ws`** (`src/ws.rs`): Axum REST API server. Two endpoints:
+
+- `PUT /transactions` — upload CSV (multipart form data), stored in
+  `Arc<Mutex<Option<Transactions>>>`
+- `GET /transactions` — retrieve as JSON
 
 Core modules:
 
 - **`src/transactions.rs`**: Domain logic. `MyTransaction` (single row from
   semicolon-delimited CSV), `Transactions` (collection with CSV parsing and
   date iteration), `Portfolio` (symbol → quantity map).
-- **`src/stooq_download.rs`**: Downloads OHLCV data from Stooq API via
-  reqwest, writes to `/data/raw/stooq/symbol={SYMBOL}/data.csv`.
-- **`src/dataframe.rs`**: Polars utilities for loading and schema-validating
-  quote CSVs.
-- **`src/lib.rs`**: Exports the `transactions` module for use by both binaries.
+- **`src/lib.rs`**: Exports the `transactions` module for use by the binary.
 
 E2E tests use [hurl](https://hurl.dev/) files in `hurl/` and are orchestrated
 by `main-playbook.yml` (builds Docker image, starts container, runs hurl,
@@ -79,8 +70,10 @@ stage, and phase.
 2. **Plan** — Create `PLAN.md` from `SPEC.md`. Each section maps to a core
    feature and includes target state, architecture, file manifest, WBS, and
    verification steps.
-3. **Coding** — Implement from `PLAN.md`. Log problems and fixes in `BUILD-ISSUES.md`.
-4. **Acceptance** — Validate against `SPEC.md` and `PLAN.md`; output test logs.
+3. **Coding** — Implement from `PLAN.md`. Log problems and fixes in
+   `BUILD-ISSUES.md`.
+4. **Acceptance** — Validate against `SPEC.md` and `PLAN.md`; output test
+   logs.
 
 Cycle documentation lives in subdirectories of `doc/`.
 

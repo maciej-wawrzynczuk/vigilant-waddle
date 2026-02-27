@@ -13,17 +13,6 @@ use tracing::{error, info};
 use tracing_subscriber::{filter::EnvFilter, fmt, prelude::*};
 use vigilant_waddle::transactions::Transactions;
 
-#[derive(Clone, Debug)]
-struct AppState {
-    msg: String,
-    transactions: Arc<Mutex<Transactions>>,
-}
-
-use crate::transactions::Transactions;
-
-#[path = "transactions.rs"]
-mod transactions;
-
 #[derive(Clone)]
 struct AppState {
     transactions: Arc<Mutex<Option<Transactions>>>,
@@ -33,6 +22,7 @@ fn create_app(state: AppState) -> Router {
     Router::new()
         .route("/transactions", axum::routing::put(upload_transactions))
         .route("/transactions", axum::routing::get(get_transactions))
+        .layer(TraceLayer::new_for_http())
         .with_state(state)
 }
 
@@ -48,22 +38,25 @@ async fn main() {
         None => "127.0.0.1:3000".to_string(),
     };
 
-    let app = create_app();
+    let state = AppState {
+        transactions: Arc::new(Mutex::new(None)),
+    };
+
+    let app = create_app(state);
     let listener = tokio::net::TcpListener::bind(&listen_addr).await.unwrap();
-    println!("Listenin on http://{listen_addr}");
+    println!("Listening on http://{listen_addr}");
     axum::serve(listener, app).await.unwrap();
 }
 
-async fn hello_handler(State(s): State<AppState>) -> String {
-    s.msg
-}
-
-async fn get_tranasactions(State(s): State<AppState>) -> Json<Transactions> {
+async fn get_transactions(State(s): State<AppState>) -> Result<Json<Transactions>, StatusCode> {
     let data = s.transactions.lock().unwrap();
-    Json(data.clone())
+    match data.as_ref() {
+        Some(t) => Ok(Json(t.clone())),
+        None => Err(StatusCode::NOT_FOUND),
+    }
 }
 
-async fn post_transactions(
+async fn upload_transactions(
     State(s): State<AppState>,
     mut data: Multipart,
 ) -> Result<(), StatusCode> {
@@ -88,7 +81,7 @@ async fn post_transactions(
                 .transactions
                 .lock()
                 .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            *guard = t;
+            *guard = Some(t);
             return Ok(());
         }
     }
@@ -96,29 +89,15 @@ async fn post_transactions(
     Err(StatusCode::BAD_REQUEST)
 }
 
-fn create_app() -> Router {
-    let s = AppState {
-        msg: "Hello World!".to_string(),
-        transactions: Arc::new(Mutex::new(Transactions::new())),
-    };
-    Router::new()
-        .route("/hello", axum::routing::get(hello_handler))
-        .route("/transactions", axum::routing::get(get_tranasactions))
-        .route("/transactions", axum::routing::post(post_transactions))
-        .layer(TraceLayer::new_for_http())
-        .with_state(s)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::body::to_bytes;
     use axum::{
         body::Body,
         http::{Request, StatusCode},
     };
     use tower::ServiceExt; // for `oneshot`
-    use axum::body::to_bytes;
-
 
     #[tokio::test]
     async fn test_upload_transactions_success() {
@@ -128,7 +107,8 @@ mod tests {
 
         let app = create_app(state.clone());
 
-        let csv_data = "date;symbol;number;price;commision;currency\n2000-01-01;FOO;1;42.42;4.2;BAR\n";
+        let csv_data =
+            "date;symbol;number;price;commision;currency\n2000-01-01;FOO;1;42.42;4.2;BAR\n";
         let boundary = "----boundary";
         let body = format!(
             "--{}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"test.csv\"\r\n\r\n{}\r\n--{}--\r\n",
@@ -140,7 +120,10 @@ mod tests {
                 Request::builder()
                     .method("PUT")
                     .uri("/transactions")
-                    .header("content-type", format!("multipart/form-data; boundary={}", boundary))
+                    .header(
+                        "content-type",
+                        format!("multipart/form-data; boundary={}", boundary),
+                    )
                     .body(Body::from(body))
                     .unwrap(),
             )
@@ -148,7 +131,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
-        
+
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         assert_eq!(&body[..], b"Transactions uploaded successfully\n");
 
@@ -176,7 +159,10 @@ mod tests {
                 Request::builder()
                     .method("PUT")
                     .uri("/transactions")
-                    .header("content-type", format!("multipart/form-data; boundary={}", boundary))
+                    .header(
+                        "content-type",
+                        format!("multipart/form-data; boundary={}", boundary),
+                    )
                     .body(Body::from(body))
                     .unwrap(),
             )
@@ -184,7 +170,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
-        
+
         // Verify transactions were NOT stored
         assert!(state.transactions.lock().unwrap().is_none());
     }
@@ -220,7 +206,8 @@ mod tests {
         let app = create_app(state.clone());
 
         // First upload
-        let csv_data = "date;symbol;number;price;commision;currency\n2000-01-01;FOO;1;42.42;4.2;BAR\n";
+        let csv_data =
+            "date;symbol;number;price;commision;currency\n2000-01-01;FOO;1;42.42;4.2;BAR\n";
         let boundary = "----boundary";
         let body = format!(
             "--{}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"test.csv\"\r\n\r\n{}\r\n--{}--\r\n",
@@ -232,7 +219,10 @@ mod tests {
                 Request::builder()
                     .method("PUT")
                     .uri("/transactions")
-                    .header("content-type", format!("multipart/form-data; boundary={}", boundary))
+                    .header(
+                        "content-type",
+                        format!("multipart/form-data; boundary={}", boundary),
+                    )
                     .body(Body::from(body))
                     .unwrap(),
             )
@@ -253,7 +243,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
-        
+
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert!(json["p"].as_array().unwrap().len() == 1);
