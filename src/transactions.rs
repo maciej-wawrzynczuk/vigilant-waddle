@@ -97,12 +97,12 @@ impl fmt::Display for Portfolio {
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct MyTransaction {
-    // date;symbol;number;price;commision;currency
+    // date;symbol;number;price;commission;currency
     pub date: NaiveDate,
     pub symbol: String,
     pub number: i32,
     pub price: Decimal,
-    pub commision: Decimal,
+    pub commission: Decimal,
     pub currency: String,
 }
 
@@ -148,7 +148,14 @@ impl Transactions {
 
         // Validate headers
         let headers = rdr.headers()?;
-        let expected = ["date", "symbol", "number", "price", "commision", "currency"];
+        let expected = [
+            "date",
+            "symbol",
+            "number",
+            "price",
+            "commission",
+            "currency",
+        ];
         if headers.len() != expected.len()
             || !expected.iter().zip(headers.iter()).all(|(e, h)| e == &h)
         {
@@ -206,7 +213,7 @@ mod test {
     #[test]
     fn test_from_csv() {
         let test_rd = Cursor::new(indoc! {"
-            date;symbol;number;price;commision;currency
+            date;symbol;number;price;commission;currency
             2000-01-01;FOO;1;42.42;4.2;BAR
         "});
 
@@ -250,7 +257,7 @@ mod test {
 
     fn test_rd() -> impl Read {
         Cursor::new(indoc! {"
-            date;symbol;number;price;commision;currency
+            date;symbol;number;price;commission;currency
             2000-01-01;FOO;1;42.42;4.2;BAR
             2000-01-02;BAZ;1;42.42;4.2;QUX
         "})
@@ -259,7 +266,7 @@ mod test {
     #[test]
     fn test_days_iter() {
         let sut = Transactions::try_from_reader(Cursor::new(indoc! {"
-            date;symbol;number;price;commision;currency
+            date;symbol;number;price;commission;currency
             2000-01-01;FOO;1;42.42;4.2;BAR
             2000-01-03;BAZ;1;42.42;4.2;QUX
         "}))
@@ -288,7 +295,7 @@ mod test {
     #[test]
     fn portfolio1() {
         let t = Transactions::try_from_reader(Cursor::new(indoc! {"
-            date;symbol;number;price;commision;currency
+            date;symbol;number;price;commission;currency
             2000-01-01;FOO;1;42.42;4.2;BAR
         "}))
         .unwrap();
@@ -302,7 +309,7 @@ mod test {
     fn portfolio2() {
         let mut sut = Portfolio::new();
         let t = Transactions::try_from_reader(Cursor::new(indoc! {"
-            date;symbol;number;price;commision;currency
+            date;symbol;number;price;commission;currency
             2000-01-01;FOO;1;42.42;4.2;BAR
             2000-01-01;BAR;1;42.42;4.2;BAR
         "}))
@@ -317,7 +324,7 @@ mod test {
     fn portfolio_same() {
         let mut sut = Portfolio::new();
         let t = Transactions::try_from_reader(Cursor::new(indoc! {"
-            date;symbol;number;price;commision;currency
+            date;symbol;number;price;commission;currency
             2000-01-01;FOO;1;42.42;4.2;BAR
             2000-01-01;FOO;1;42.42;4.2;BAR
         "}))
@@ -330,7 +337,7 @@ mod test {
     #[test]
     fn portfolio_yaml_single() {
         let t = Transactions::try_from_reader(Cursor::new(indoc! {"
-            date;symbol;number;price;commision;currency
+            date;symbol;number;price;commission;currency
             2000-01-01;FOO;1;42.42;4.2;BAR
         "}))
         .unwrap();
@@ -342,7 +349,7 @@ mod test {
     #[test]
     fn portfolio_yaml_accumulated() {
         let t = Transactions::try_from_reader(Cursor::new(indoc! {"
-            date;symbol;number;price;commision;currency
+            date;symbol;number;price;commission;currency
             2000-01-01;FOO;1;42.42;4.2;BAR
             2000-01-02;FOO;1;42.42;4.2;BAR
         "}))
@@ -362,7 +369,7 @@ mod test {
     #[test]
     fn test_wrong_delimiter_fails() {
         let wrong_delimiter = Cursor::new(indoc! {"
-            date,symbol,number,price,commision,currency
+            date,symbol,number,price,commission,currency
             2000-01-01,FOO,1,42.42,4.2,BAR
         "});
         let result = Transactions::try_from_reader(wrong_delimiter);

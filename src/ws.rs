@@ -145,7 +145,7 @@ mod tests {
             transactions: Arc::new(Mutex::new(None)),
         };
         let csv_data =
-            "date;symbol;number;price;commision;currency\n2000-01-01;FOO;1;42.42;4.2;BAR\n";
+            "date;symbol;number;price;commission;currency\n2000-01-01;FOO;1;42.42;4.2;BAR\n";
         let boundary = "----boundary";
         let body = format!(
             "--{}\r\nContent-Disposition: form-data; name=\"transaction_log\"; filename=\"test.csv\"\r\n\r\n{}\r\n--{}--\r\n",
@@ -196,7 +196,7 @@ mod tests {
         let app = create_app(state.clone());
 
         let csv_data =
-            "date;symbol;number;price;commision;currency\n2000-01-01;FOO;1;42.42;4.2;BAR\n";
+            "date;symbol;number;price;commission;currency\n2000-01-01;FOO;1;42.42;4.2;BAR\n";
         let boundary = "----boundary";
         let body = format!(
             "--{}\r\nContent-Disposition: form-data; name=\"transaction_log\"; filename=\"test.csv\"\r\n\r\n{}\r\n--{}--\r\n",
@@ -292,7 +292,7 @@ mod tests {
 
         // First upload
         let csv_data =
-            "date;symbol;number;price;commision;currency\n2000-01-01;FOO;1;42.42;4.2;BAR\n";
+            "date;symbol;number;price;commission;currency\n2000-01-01;FOO;1;42.42;4.2;BAR\n";
         let boundary = "----boundary";
         let body = format!(
             "--{}\r\nContent-Disposition: form-data; name=\"transaction_log\"; filename=\"test.csv\"\r\n\r\n{}\r\n--{}--\r\n",

@@ -88,3 +88,41 @@ Cycle documentation lives in subdirectories of `doc/`.
   tags). All Ansible code must pass `ansible-lint`.
 - **Markdown**: always comply with markdownlint; correct formatting, spelling,
   and grammar proactively. All markdown must pass `markdownlint-cli2`.
+
+## Code Review Instructions
+
+1. CLARITY OF INTENT:
+
+   - Can you determine the business goal from the code alone?
+   - Identify "obscure" sections where the logic is hard to follow.
+
+1. ARCHITECTURE & SOLID:
+
+   - Evaluate Single Responsibility and Open/Closed principles.
+   - Check for tight coupling or unnecessary dependencies between modules.
+   - Is the abstraction level appropriate for this problem?
+
+1. TECHNICAL SOLUTIONS:
+
+   - Are the chosen libraries, patterns, and algorithms optimal for
+     2026 standards?
+   - Identify potential performance bottlenecks (Big O complexity).
+
+1. CLEAN CODE & NAMING:
+
+   - Is the naming semantic and self-explanatory?
+   - Check for "code smells" (Long methods, Magic numbers, etc.).
+
+1. TESTABILITY & SECURITY:
+
+   - Is the code easily testable (DI/Mocking)?
+   - Identify security risks (Input validation, Auth leaks) and
+     unhandled edge cases.
+
+## Output Format
+
+1. BRIEF SUMMARY: "What this code does" (to verify my intent).
+1. FINDINGS TABLE: [File:Line] | [Issue] | [Suggested Fix].
+1. SCORECARD: Rate 1-10 for each of the 5 criteria.
+1. THE "GOLDEN RULE": The single most important architectural
+   improvement I should make.

@@ -1,2 +1,2 @@
-date;symbol;number;price;commision;currency
+date;symbol;number;price;commission;currency
 2000-01-01;FOO;1;1.1;0.1;BAR
