@@ -1,6 +1,7 @@
 use axum::{
     Json, Router,
     extract::{Multipart, State},
+    response::{IntoResponse, Response},
 };
 use http::StatusCode;
 use std::{
@@ -11,7 +12,7 @@ use std::{
 use tower_http::trace::TraceLayer;
 use tracing::{error, info};
 use tracing_subscriber::{filter::EnvFilter, fmt, prelude::*};
-use vigilant_waddle::transactions::Transactions;
+use vigilant_waddle::transactions::{Portfolio, Transactions};
 
 #[derive(Clone)]
 struct AppState {
@@ -22,6 +23,7 @@ fn create_app(state: AppState) -> Router {
     Router::new()
         .route("/transactions", axum::routing::put(upload_transactions))
         .route("/transactions", axum::routing::get(get_transactions))
+        .route("/portfolio", axum::routing::get(get_portfolio))
         .layer(TraceLayer::new_for_http())
         .with_state(state)
 }
@@ -46,6 +48,25 @@ async fn main() {
     let listener = tokio::net::TcpListener::bind(&listen_addr).await.unwrap();
     println!("Listening on http://{listen_addr}");
     axum::serve(listener, app).await.unwrap();
+}
+
+async fn get_portfolio(State(s): State<AppState>) -> Response {
+    let data = s.transactions.lock().unwrap();
+    let Some(t) = data.as_ref() else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    let portfolio = Portfolio::from_transactions(t);
+    match serde_yaml::to_string(&portfolio) {
+        Err(e) => {
+            error!("YAML serialization error: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+        Ok(yaml) => (
+            [(axum::http::header::CONTENT_TYPE, "application/yaml")],
+            yaml,
+        )
+            .into_response(),
+    }
 }
 
 async fn get_transactions(State(s): State<AppState>) -> Result<Json<Transactions>, StatusCode> {
@@ -98,6 +119,73 @@ mod tests {
         http::{Request, StatusCode},
     };
     use tower::ServiceExt; // for `oneshot`
+
+    #[tokio::test]
+    async fn test_get_portfolio_empty() {
+        let state = AppState {
+            transactions: Arc::new(Mutex::new(None)),
+        };
+        let app = create_app(state);
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/portfolio")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_get_portfolio_after_upload() {
+        let state = AppState {
+            transactions: Arc::new(Mutex::new(None)),
+        };
+        let csv_data =
+            "date;symbol;number;price;commision;currency\n2000-01-01;FOO;1;42.42;4.2;BAR\n";
+        let boundary = "----boundary";
+        let body = format!(
+            "--{}\r\nContent-Disposition: form-data; name=\"transaction_log\"; filename=\"test.csv\"\r\n\r\n{}\r\n--{}--\r\n",
+            boundary, csv_data, boundary
+        );
+        let _ = create_app(state.clone())
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri("/transactions")
+                    .header(
+                        "content-type",
+                        format!("multipart/form-data; boundary={}", boundary),
+                    )
+                    .body(Body::from(body))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let response = create_app(state)
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/portfolio")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response.headers().get("content-type").unwrap(),
+            "application/yaml"
+        );
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let yaml = std::str::from_utf8(&body).unwrap();
+        assert!(yaml.contains("FOO: 1"), "yaml was: {yaml}");
+    }
 
     #[tokio::test]
     async fn test_upload_transactions_success() {

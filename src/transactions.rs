@@ -37,6 +37,13 @@ impl Default for Portfolio {
 
 impl Portfolio {
     #[must_use]
+    pub fn from_transactions(t: &Transactions) -> Self {
+        let mut p = Self::new();
+        t.iter().for_each(|tx| p.add_transaction(tx));
+        p
+    }
+
+    #[must_use]
     pub fn new() -> Self {
         Self {
             data: Vec::<(String, i32)>::new(),
@@ -60,6 +67,20 @@ impl Portfolio {
             Some(p) => p.1 += t.number,
             None => self.data.push((t.symbol.clone(), t.number)),
         }
+    }
+}
+
+impl Serialize for Portfolio {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeMap;
+        let mut map = serializer.serialize_map(Some(self.data.len()))?;
+        for (symbol, qty) in &self.data {
+            map.serialize_entry(symbol, qty)?;
+        }
+        map.end()
     }
 }
 
@@ -304,6 +325,31 @@ mod test {
         t.iter().for_each(|t| sut.add_transaction(t));
 
         assert_eq!(sut.amount("FOO"), 2);
+    }
+
+    #[test]
+    fn portfolio_yaml_single() {
+        let t = Transactions::try_from_reader(Cursor::new(indoc! {"
+            date;symbol;number;price;commision;currency
+            2000-01-01;FOO;1;42.42;4.2;BAR
+        "}))
+        .unwrap();
+        let sut = Portfolio::from_transactions(&t);
+        let yaml = serde_yaml::to_string(&sut).unwrap();
+        assert!(yaml.contains("FOO: 1"), "yaml was: {yaml}");
+    }
+
+    #[test]
+    fn portfolio_yaml_accumulated() {
+        let t = Transactions::try_from_reader(Cursor::new(indoc! {"
+            date;symbol;number;price;commision;currency
+            2000-01-01;FOO;1;42.42;4.2;BAR
+            2000-01-02;FOO;1;42.42;4.2;BAR
+        "}))
+        .unwrap();
+        let sut = Portfolio::from_transactions(&t);
+        let yaml = serde_yaml::to_string(&sut).unwrap();
+        assert!(yaml.contains("FOO: 2"), "yaml was: {yaml}");
     }
 
     #[test]
