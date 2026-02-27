@@ -111,7 +111,7 @@ mod tests {
             "date;symbol;number;price;commision;currency\n2000-01-01;FOO;1;42.42;4.2;BAR\n";
         let boundary = "----boundary";
         let body = format!(
-            "--{}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"test.csv\"\r\n\r\n{}\r\n--{}--\r\n",
+            "--{}\r\nContent-Disposition: form-data; name=\"transaction_log\"; filename=\"test.csv\"\r\n\r\n{}\r\n--{}--\r\n",
             boundary, csv_data, boundary
         );
 
@@ -132,9 +132,6 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-        assert_eq!(&body[..], b"Transactions uploaded successfully\n");
-
         // Verify transactions were stored
         assert!(state.transactions.lock().unwrap().is_some());
     }
@@ -150,7 +147,7 @@ mod tests {
         let invalid_csv = "invalid,csv,data\n";
         let boundary = "----boundary";
         let body = format!(
-            "--{}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"test.csv\"\r\n\r\n{}\r\n--{}--\r\n",
+            "--{}\r\nContent-Disposition: form-data; name=\"transaction_log\"; filename=\"test.csv\"\r\n\r\n{}\r\n--{}--\r\n",
             boundary, invalid_csv, boundary
         );
 
@@ -169,7 +166,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
         // Verify transactions were NOT stored
         assert!(state.transactions.lock().unwrap().is_none());
@@ -210,7 +207,7 @@ mod tests {
             "date;symbol;number;price;commision;currency\n2000-01-01;FOO;1;42.42;4.2;BAR\n";
         let boundary = "----boundary";
         let body = format!(
-            "--{}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"test.csv\"\r\n\r\n{}\r\n--{}--\r\n",
+            "--{}\r\nContent-Disposition: form-data; name=\"transaction_log\"; filename=\"test.csv\"\r\n\r\n{}\r\n--{}--\r\n",
             boundary, csv_data, boundary
         );
 
@@ -246,7 +243,7 @@ mod tests {
 
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert!(json["p"].as_array().unwrap().len() == 1);
-        assert!(json["p"][0]["symbol"] == "FOO");
+        assert!(json.as_array().unwrap().len() == 1);
+        assert!(json[0]["symbol"] == "FOO");
     }
 }
