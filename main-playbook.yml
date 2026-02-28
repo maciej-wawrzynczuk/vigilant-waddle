@@ -1,25 +1,30 @@
 # vim: ft=yaml.ansible
 ---
-- name: A test
+- name: Waddle playbook
   hosts: localhost
   connection: local
   gather_facts: false
 
   vars:
     test_image: "localhost/waddle-test"
+    ws_image: "localhost/waddle-ws:latest"
+    frontend_image: "localhost/waddle-frontend:latest"
 
   tasks:
     - name: Build release binary
       ansible.builtin.command: cargo build --bin waddle-ws
       changed_when: true
+      tags: [build, e2e]
 
-    - name: Build image
+    - name: Build test image
       community.docker.docker_image_build:
         name: "{{ test_image }}"
         path: "{{ playbook_dir }}"
         rebuild: always
+      tags: [build, e2e]
 
-    - name: Run an test
+    - name: Run e2e tests
+      tags: [e2e]
       block:
         - name: Spin up the container
           community.docker.docker_container:
@@ -43,3 +48,55 @@
           community.docker.docker_container:
             name: "test_waddle"
             state: absent
+
+    - name: Build waddle-ws image for k8s
+      community.docker.docker_image_build:
+        name: "{{ ws_image }}"
+        path: "{{ playbook_dir }}"
+        rebuild: always
+      tags: [k8s]
+
+    - name: Build frontend image
+      community.docker.docker_image_build:
+        name: "{{ frontend_image }}"
+        path: "{{ playbook_dir }}"
+        dockerfile: Dockerfile.frontend
+        rebuild: always
+      tags: [k8s]
+
+    - name: Save waddle-ws image to tarball
+      ansible.builtin.command: docker save {{ ws_image }} -o /tmp/waddle-ws.tar
+      changed_when: true
+      tags: [k8s]
+
+    - name: Save frontend image to tarball
+      ansible.builtin.command: docker save {{ frontend_image }} -o /tmp/waddle-frontend.tar
+      changed_when: true
+      tags: [k8s]
+
+    - name: Import waddle-ws image into cluster
+      ansible.builtin.command: k3s ctr images import /tmp/waddle-ws.tar
+      changed_when: true
+      tags: [k8s]
+
+    - name: Import frontend image into cluster
+      ansible.builtin.command: k3s ctr images import /tmp/waddle-frontend.tar
+      changed_when: true
+      tags: [k8s]
+
+    - name: Apply k8s manifests
+      ansible.builtin.command: kubectl apply -f "{{ playbook_dir }}/k8s/"
+      changed_when: true
+      tags: [k8s]
+
+    - name: Wait for waddle-ws rollout
+      ansible.builtin.command: >-
+        kubectl rollout status deployment/waddle-ws -n waddle --timeout=60s
+      changed_when: false
+      tags: [k8s]
+
+    - name: Wait for waddle-frontend rollout
+      ansible.builtin.command: >-
+        kubectl rollout status deployment/waddle-frontend -n waddle --timeout=60s
+      changed_when: false
+      tags: [k8s]

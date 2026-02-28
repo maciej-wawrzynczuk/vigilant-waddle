@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Waddle Portfolio</title>
+  <link rel="stylesheet" href="pico.min.css">
+</head>
+<body>
+  <main class="container">
+    <h1>Waddle Portfolio</h1>
+
+    <article>
+      <h2>Upload Transactions</h2>
+      <input type="file" id="csv-file" accept=".csv">
+      <button id="upload-btn">Upload</button>
+    </article>
+
+    <p id="status"></p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Symbol</th>
+          <th>Quantity</th>
+        </tr>
+      </thead>
+      <tbody id="portfolio-body">
+        <tr>
+          <td colspan="2">No data loaded yet.</td>
+        </tr>
+      </tbody>
+    </table>
+  </main>
+
+  <script>
+    function parseYaml(text) {
+      const result = {};
+      for (const line of text.trim().split('\n')) {
+        const idx = line.indexOf(': ');
+        if (idx !== -1) {
+          result[line.slice(0, idx).trim()] = Number(line.slice(idx + 2).trim());
+        }
+      }
+      return result;
+    }
+
+    function renderPortfolio(data) {
+      const tbody = document.getElementById('portfolio-body');
+      tbody.replaceChildren();
+      const entries = Object.entries(data);
+      if (entries.length === 0) {
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = 2;
+        td.textContent = 'No data loaded yet.';
+        tr.appendChild(td);
+        tbody.appendChild(tr);
+        return;
+      }
+      for (const [symbol, qty] of entries) {
+        const tr = document.createElement('tr');
+        const tdSym = document.createElement('td');
+        tdSym.textContent = symbol;
+        const tdQty = document.createElement('td');
+        tdQty.textContent = qty;
+        tr.appendChild(tdSym);
+        tr.appendChild(tdQty);
+        tbody.appendChild(tr);
+      }
+    }
+
+    async function loadPortfolio() {
+      const status = document.getElementById('status');
+      try {
+        const res = await fetch('/portfolio');
+        if (res.status === 404) {
+          renderPortfolio({});
+          return;
+        }
+        if (!res.ok) {
+          const body = await res.text();
+          status.textContent = `Error loading portfolio: HTTP ${res.status} \u2014 ${body.slice(0, 120)}`;
+          return;
+        }
+        renderPortfolio(parseYaml(await res.text()));
+      } catch (err) {
+        status.textContent = `Network error: ${err.message}`;
+      }
+    }
+
+    async function uploadCsv(file) {
+      const status = document.getElementById('status');
+      const fd = new FormData();
+      fd.append('transaction_log', file);
+      try {
+        const res = await fetch('/transactions', {
+          method: 'PUT',
+          headers: { 'X-Overwrite': 'confirm' },
+          body: fd,
+        });
+        if (!res.ok) {
+          const body = await res.text();
+          status.textContent = `Upload failed: HTTP ${res.status} \u2014 ${body.slice(0, 120)}`;
+          return;
+        }
+        status.textContent = 'Upload successful.';
+        await loadPortfolio();
+      } catch (err) {
+        status.textContent = `Network error: ${err.message}`;
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      loadPortfolio();
+      document.getElementById('upload-btn').addEventListener('click', () => {
+        const file = document.getElementById('csv-file').files[0];
+        if (!file) {
+          document.getElementById('status').textContent = 'Please select a CSV file first.';
+          return;
+        }
+        uploadCsv(file);
+      });
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: waddle-ws
+  namespace: waddle
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: waddle-ws
+  template:
+    metadata:
+      labels:
+        app: waddle-ws
+    spec:
+      containers:
+        - name: waddle-ws
+          image: localhost/waddle-ws:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 3000
+          env:
+            - name: WADDLE_LISTEN_ADDR
+              value: "0.0.0.0:3000"
+            - name: RUST_LOG
+              value: info
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: waddle-ws
+  namespace: waddle
+spec:
+  selector:
+    app: waddle-ws
+  ports:
+    - port: 3000
+      targetPort: 3000

@@ -1,2 +1,6 @@
 **/*
 !target/debug/waddle-ws
+!frontend/
+!frontend/**
+!nginx/
+!nginx/nginx.conf
