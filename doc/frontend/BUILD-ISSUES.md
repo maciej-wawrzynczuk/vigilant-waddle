@@ -13,6 +13,25 @@ exception rules to `.dockerignore`.
 
 ---
 
+## BI-04 hurl v6 parallel execution broke ordered e2e tests
+
+**Symptom**: `hurl --test hurl/` fails on `overwrite_rejected.hurl` and
+`empty_transactions.hurl` because hurl v6 defaults to parallel file execution
+in `--test` mode, and the test files are order-dependent (some must run before
+any data is loaded).
+
+**Root cause**: hurl v6 changed `--test` to imply `--parallel`. Files also
+run in filesystem (inode) order rather than alphabetically when given a
+directory, so `trans.hurl` (which loads data) runs before the tests that
+require an empty server.
+
+**Fix**: Pass `--jobs 1` to force sequential execution and list the hurl files
+explicitly in dependency order:
+`empty_transactions.hurl` → `overwrite_rejected.hurl` → `trans.hurl` →
+`portfolio.hurl`.
+
+---
+
 ## BI-03 Wrong cluster import tool — k3s instead of kind
 
 **Symptom**: Playbook used `k3s ctr images import` which is not available; the

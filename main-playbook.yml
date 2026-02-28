@@ -40,7 +40,12 @@
             timeout: 10
 
         - name: Test with hurl
-          ansible.builtin.command: hurl --test hurl/
+          ansible.builtin.command: >-
+            hurl --test --jobs 1
+            hurl/empty_transactions.hurl
+            hurl/overwrite_rejected.hurl
+            hurl/trans.hurl
+            hurl/portfolio.hurl
           changed_when: false
 
       always:
@@ -71,6 +76,11 @@
 
     - name: Load frontend image into kind
       ansible.builtin.command: kind load docker-image {{ frontend_image }}
+      changed_when: true
+      tags: [k8s]
+
+    - name: Apply k8s namespace
+      ansible.builtin.command: kubectl apply -f "{{ playbook_dir }}/k8s/namespace.yaml"
       changed_when: true
       tags: [k8s]
 
