@@ -120,11 +120,25 @@ mod tests {
     };
     use tower::ServiceExt; // for `oneshot`
 
+    fn empty_state() -> AppState {
+        AppState {
+            transactions: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    fn multipart_csv(csv: &str) -> (String, String) {
+        let boundary = "----boundary".to_string();
+        let body = format!(
+            "--{boundary}\r\nContent-Disposition: form-data; \
+             name=\"transaction_log\"; filename=\"test.csv\"\r\n\r\n\
+             {csv}\r\n--{boundary}--\r\n"
+        );
+        (boundary, body)
+    }
+
     #[tokio::test]
     async fn test_get_portfolio_empty() {
-        let state = AppState {
-            transactions: Arc::new(Mutex::new(None)),
-        };
+        let state = empty_state();
         let app = create_app(state);
         let response = app
             .oneshot(
@@ -141,30 +155,24 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_portfolio_after_upload() {
-        let state = AppState {
-            transactions: Arc::new(Mutex::new(None)),
-        };
-        let csv_data =
-            "date;symbol;number;price;commission;currency\n2000-01-01;FOO;1;42.42;4.2;BAR\n";
-        let boundary = "----boundary";
-        let body = format!(
-            "--{}\r\nContent-Disposition: form-data; name=\"transaction_log\"; filename=\"test.csv\"\r\n\r\n{}\r\n--{}--\r\n",
-            boundary, csv_data, boundary
-        );
-        let _ = create_app(state.clone())
+        let state = empty_state();
+        let csv = "date;symbol;number;price;commission;currency\n2000-01-01;FOO;1;42.42;4.2;BAR\n";
+        let (boundary, body) = multipart_csv(csv);
+        let upload = create_app(state.clone())
             .oneshot(
                 Request::builder()
                     .method("PUT")
                     .uri("/transactions")
                     .header(
                         "content-type",
-                        format!("multipart/form-data; boundary={}", boundary),
+                        format!("multipart/form-data; boundary={boundary}"),
                     )
                     .body(Body::from(body))
                     .unwrap(),
             )
             .await
             .unwrap();
+        assert_eq!(upload.status(), StatusCode::OK);
 
         let response = create_app(state)
             .oneshot(
@@ -189,19 +197,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_upload_transactions_success() {
-        let state = AppState {
-            transactions: Arc::new(Mutex::new(None)),
-        };
+        let state = empty_state();
 
         let app = create_app(state.clone());
 
-        let csv_data =
-            "date;symbol;number;price;commission;currency\n2000-01-01;FOO;1;42.42;4.2;BAR\n";
-        let boundary = "----boundary";
-        let body = format!(
-            "--{}\r\nContent-Disposition: form-data; name=\"transaction_log\"; filename=\"test.csv\"\r\n\r\n{}\r\n--{}--\r\n",
-            boundary, csv_data, boundary
-        );
+        let csv = "date;symbol;number;price;commission;currency\n2000-01-01;FOO;1;42.42;4.2;BAR\n";
+        let (boundary, body) = multipart_csv(csv);
 
         let response = app
             .oneshot(
@@ -210,7 +211,7 @@ mod tests {
                     .uri("/transactions")
                     .header(
                         "content-type",
-                        format!("multipart/form-data; boundary={}", boundary),
+                        format!("multipart/form-data; boundary={boundary}"),
                     )
                     .body(Body::from(body))
                     .unwrap(),
@@ -220,24 +221,26 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::OK);
 
-        // Verify transactions were stored
-        assert!(state.transactions.lock().unwrap().is_some());
+        let get = create_app(state)
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/transactions")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(get.status(), StatusCode::OK);
     }
 
     #[tokio::test]
     async fn test_upload_transactions_invalid_csv() {
-        let state = AppState {
-            transactions: Arc::new(Mutex::new(None)),
-        };
+        let state = empty_state();
 
         let app = create_app(state.clone());
 
-        let invalid_csv = "invalid,csv,data\n";
-        let boundary = "----boundary";
-        let body = format!(
-            "--{}\r\nContent-Disposition: form-data; name=\"transaction_log\"; filename=\"test.csv\"\r\n\r\n{}\r\n--{}--\r\n",
-            boundary, invalid_csv, boundary
-        );
+        let (boundary, body) = multipart_csv("invalid,csv,data\n");
 
         let response = app
             .oneshot(
@@ -246,7 +249,7 @@ mod tests {
                     .uri("/transactions")
                     .header(
                         "content-type",
-                        format!("multipart/form-data; boundary={}", boundary),
+                        format!("multipart/form-data; boundary={boundary}"),
                     )
                     .body(Body::from(body))
                     .unwrap(),
@@ -256,15 +259,22 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 
-        // Verify transactions were NOT stored
-        assert!(state.transactions.lock().unwrap().is_none());
+        let get = create_app(state)
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/transactions")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(get.status(), StatusCode::NOT_FOUND);
     }
 
     #[tokio::test]
     async fn test_get_transactions_empty() {
-        let state = AppState {
-            transactions: Arc::new(Mutex::new(None)),
-        };
+        let state = empty_state();
 
         let app = create_app(state);
 
@@ -284,35 +294,28 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_transactions_after_upload() {
-        let state = AppState {
-            transactions: Arc::new(Mutex::new(None)),
-        };
+        let state = empty_state();
 
         let app = create_app(state.clone());
 
         // First upload
-        let csv_data =
-            "date;symbol;number;price;commission;currency\n2000-01-01;FOO;1;42.42;4.2;BAR\n";
-        let boundary = "----boundary";
-        let body = format!(
-            "--{}\r\nContent-Disposition: form-data; name=\"transaction_log\"; filename=\"test.csv\"\r\n\r\n{}\r\n--{}--\r\n",
-            boundary, csv_data, boundary
-        );
-
-        let _ = app
+        let csv = "date;symbol;number;price;commission;currency\n2000-01-01;FOO;1;42.42;4.2;BAR\n";
+        let (boundary, body) = multipart_csv(csv);
+        let upload = app
             .oneshot(
                 Request::builder()
                     .method("PUT")
                     .uri("/transactions")
                     .header(
                         "content-type",
-                        format!("multipart/form-data; boundary={}", boundary),
+                        format!("multipart/form-data; boundary={boundary}"),
                     )
                     .body(Body::from(body))
                     .unwrap(),
             )
             .await
             .unwrap();
+        assert_eq!(upload.status(), StatusCode::OK);
 
         // Then GET
         let app = create_app(state);

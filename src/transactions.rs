@@ -126,8 +126,10 @@ impl Transactions {
 
 #[cfg(test)]
 mod test {
-    use crate::transactions::{Portfolio, Transactions};
+    use crate::transactions::{MyTransaction, Portfolio, Transactions};
+    use chrono::NaiveDate;
     use indoc::indoc;
+    use rust_decimal::Decimal;
     use std::io::Cursor;
 
     #[test]
@@ -138,30 +140,36 @@ mod test {
         "});
 
         let sut = Transactions::try_from_reader(test_rd).unwrap();
-        sut.iter().next().unwrap();
+        let tx = sut.iter().next().unwrap();
+        assert_eq!(tx.symbol, "FOO");
+        assert_eq!(tx.number, 1);
+        assert_eq!(tx.price, "42.42".parse::<Decimal>().unwrap());
+    }
+
+    fn make_tx(symbol: &str, number: i32) -> MyTransaction {
+        MyTransaction {
+            date: NaiveDate::from_ymd_opt(2000, 1, 1).unwrap(),
+            symbol: symbol.to_string(),
+            number,
+            price: "42.42".parse::<Decimal>().unwrap(),
+            commission: "4.2".parse::<Decimal>().unwrap(),
+            currency: "BAR".to_string(),
+        }
     }
 
     #[test]
     fn portfolio_yaml_single() {
-        let t = Transactions::try_from_reader(Cursor::new(indoc! {"
-            date;symbol;number;price;commission;currency
-            2000-01-01;FOO;1;42.42;4.2;BAR
-        "}))
-        .unwrap();
-        let sut = Portfolio::from_transactions(&t);
+        let mut sut = Portfolio::new();
+        sut.add_transaction(&make_tx("FOO", 1));
         let yaml = serde_yaml::to_string(&sut).unwrap();
         assert!(yaml.contains("FOO: 1"), "yaml was: {yaml}");
     }
 
     #[test]
     fn portfolio_yaml_multiple_symbols() {
-        let t = Transactions::try_from_reader(Cursor::new(indoc! {"
-            date;symbol;number;price;commission;currency
-            2000-01-01;FOO;1;42.42;4.2;BAR
-            2000-01-01;BAZ;1;42.42;4.2;BAR
-        "}))
-        .unwrap();
-        let sut = Portfolio::from_transactions(&t);
+        let mut sut = Portfolio::new();
+        sut.add_transaction(&make_tx("FOO", 1));
+        sut.add_transaction(&make_tx("BAZ", 1));
         let yaml = serde_yaml::to_string(&sut).unwrap();
         assert!(yaml.contains("FOO: 1"), "yaml was: {yaml}");
         assert!(yaml.contains("BAZ: 1"), "yaml was: {yaml}");
@@ -169,13 +177,9 @@ mod test {
 
     #[test]
     fn portfolio_yaml_accumulated() {
-        let t = Transactions::try_from_reader(Cursor::new(indoc! {"
-            date;symbol;number;price;commission;currency
-            2000-01-01;FOO;1;42.42;4.2;BAR
-            2000-01-02;FOO;1;42.42;4.2;BAR
-        "}))
-        .unwrap();
-        let sut = Portfolio::from_transactions(&t);
+        let mut sut = Portfolio::new();
+        sut.add_transaction(&make_tx("FOO", 1));
+        sut.add_transaction(&make_tx("FOO", 1));
         let yaml = serde_yaml::to_string(&sut).unwrap();
         assert!(yaml.contains("FOO: 2"), "yaml was: {yaml}");
     }
