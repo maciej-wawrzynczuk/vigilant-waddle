@@ -1,3 +1,4 @@
+use anyhow::{Context as _, Result};
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -87,14 +88,14 @@ impl Transactions {
     /// - Unable to find headers
     /// - Has bad headers
     /// - Hit format errors.
-    pub fn try_from_reader<R: Read>(rd: R) -> csv::Result<Self> {
+    pub fn try_from_reader<R: Read>(rd: R) -> Result<Self> {
         let mut rdr = csv::ReaderBuilder::new()
             .delimiter(b';')
             .has_headers(true)
             .from_reader(rd);
 
         // Validate headers
-        let headers = rdr.headers()?;
+        let headers = rdr.headers().context("failed to read CSV headers")?;
         let expected = [
             "date",
             "symbol",
@@ -106,21 +107,32 @@ impl Transactions {
         if headers.len() != expected.len()
             || !expected.iter().zip(headers.iter()).all(|(e, h)| e == &h)
         {
-            return Err(csv::Error::from(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "Invalid CSV headers",
-            )));
+            anyhow::bail!(
+                "invalid CSV headers: expected {expected:?}, got {:?}",
+                headers.iter().collect::<Vec<_>>()
+            );
         }
 
         let v = rdr
             .into_deserialize()
-            .collect::<csv::Result<Vec<MyTransaction>>>()?;
+            .collect::<csv::Result<Vec<MyTransaction>>>()
+            .context("failed to deserialize CSV rows")?;
 
         Ok(Self { p: v })
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &MyTransaction> + '_ {
         self.p.iter()
+    }
+
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.p.len()
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.p.is_empty()
     }
 }
 

@@ -1,9 +1,9 @@
 use axum::{
     Json, Router,
-    extract::{Multipart, State},
+    extract::{DefaultBodyLimit, Multipart, State},
     response::{IntoResponse, Response},
 };
-use http::StatusCode;
+use http::{HeaderMap, StatusCode};
 use std::{
     env,
     io::Cursor,
@@ -24,6 +24,7 @@ fn create_app(state: AppState) -> Router {
         .route("/transactions", axum::routing::put(upload_transactions))
         .route("/transactions", axum::routing::get(get_transactions))
         .route("/portfolio", axum::routing::get(get_portfolio))
+        .layer(DefaultBodyLimit::max(10 * 1024 * 1024))
         .layer(TraceLayer::new_for_http())
         .with_state(state)
 }
@@ -35,9 +36,13 @@ async fn main() {
         .with(EnvFilter::from_default_env())
         .init();
 
-    let listen_addr = match env::var_os("WADDLE_LISTEN_ADDR") {
-        Some(a) => a.into_string().unwrap(),
-        None => "127.0.0.1:3000".to_string(),
+    let listen_addr = match env::var("WADDLE_LISTEN_ADDR") {
+        Ok(a) => a,
+        Err(env::VarError::NotUnicode(v)) => {
+            error!("WADDLE_LISTEN_ADDR is not valid UTF-8: {v:?}, using default");
+            "127.0.0.1:3000".to_string()
+        }
+        Err(env::VarError::NotPresent) => "127.0.0.1:3000".to_string(),
     };
 
     let state = AppState {
@@ -45,13 +50,18 @@ async fn main() {
     };
 
     let app = create_app(state);
-    let listener = tokio::net::TcpListener::bind(&listen_addr).await.unwrap();
-    println!("Listening on http://{listen_addr}");
-    axum::serve(listener, app).await.unwrap();
+    let listener = tokio::net::TcpListener::bind(&listen_addr)
+        .await
+        .expect("failed to bind to listen address");
+    info!("Listening on http://{listen_addr}");
+    axum::serve(listener, app).await.expect("server error");
 }
 
 async fn get_portfolio(State(s): State<AppState>) -> Response {
-    let data = s.transactions.lock().unwrap();
+    let data = match s.transactions.lock() {
+        Ok(guard) => guard,
+        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    };
     let Some(t) = data.as_ref() else {
         return StatusCode::NOT_FOUND.into_response();
     };
@@ -70,7 +80,10 @@ async fn get_portfolio(State(s): State<AppState>) -> Response {
 }
 
 async fn get_transactions(State(s): State<AppState>) -> Result<Json<Transactions>, StatusCode> {
-    let data = s.transactions.lock().unwrap();
+    let data = s
+        .transactions
+        .lock()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     match data.as_ref() {
         Some(t) => Ok(Json(t.clone())),
         None => Err(StatusCode::NOT_FOUND),
@@ -79,25 +92,39 @@ async fn get_transactions(State(s): State<AppState>) -> Result<Json<Transactions
 
 async fn upload_transactions(
     State(s): State<AppState>,
+    headers: HeaderMap,
     mut data: Multipart,
 ) -> Result<(), StatusCode> {
-    while let Some(f) = data.next_field().await.map_err(|_| {
-        error!("Multipart error");
+    {
+        let guard = s
+            .transactions
+            .lock()
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        if guard.is_some() {
+            let confirmed =
+                headers.get("x-overwrite").and_then(|v| v.to_str().ok()) == Some("confirm");
+            if !confirmed {
+                return Err(StatusCode::CONFLICT);
+            }
+        }
+    }
+    while let Some(f) = data.next_field().await.map_err(|e| {
+        error!("Multipart error: {e}");
         StatusCode::BAD_REQUEST
     })? {
         if let Some(name) = f.name()
             && name == "transaction_log"
         {
-            let csv = f
-                .bytes()
-                .await
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            let csv = f.bytes().await.map_err(|e| {
+                error!("Failed to read upload bytes: {e}");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
             let csv_c = Cursor::new(csv);
             let t = Transactions::try_from_reader(csv_c).map_err(|e| {
                 error!("CSV read error: {e}");
                 StatusCode::BAD_REQUEST
             })?;
-            info!("{} loaded", t.iter().count());
+            info!("{} transactions loaded", t.len());
             let mut guard = s
                 .transactions
                 .lock()
@@ -270,6 +297,67 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(get.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_upload_transactions_conflict_requires_header() {
+        let state = empty_state();
+        let csv = "date;symbol;number;price;commission;currency\n2000-01-01;FOO;1;42.42;4.2;BAR\n";
+
+        // First upload succeeds (no existing data)
+        let (boundary, body) = multipart_csv(csv);
+        let first = create_app(state.clone())
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri("/transactions")
+                    .header(
+                        "content-type",
+                        format!("multipart/form-data; boundary={boundary}"),
+                    )
+                    .body(Body::from(body))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(first.status(), StatusCode::OK);
+
+        // Second upload without header returns 409
+        let (boundary, body) = multipart_csv(csv);
+        let second = create_app(state.clone())
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri("/transactions")
+                    .header(
+                        "content-type",
+                        format!("multipart/form-data; boundary={boundary}"),
+                    )
+                    .body(Body::from(body))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(second.status(), StatusCode::CONFLICT);
+
+        // Third upload with confirmation header succeeds
+        let (boundary, body) = multipart_csv(csv);
+        let third = create_app(state)
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri("/transactions")
+                    .header(
+                        "content-type",
+                        format!("multipart/form-data; boundary={boundary}"),
+                    )
+                    .header("x-overwrite", "confirm")
+                    .body(Body::from(body))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(third.status(), StatusCode::OK);
     }
 
     #[tokio::test]
