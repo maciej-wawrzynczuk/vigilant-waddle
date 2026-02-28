@@ -66,7 +66,7 @@ stage, and phase.
 
 1. **Specification** — Create `SPEC.md` from a `SCRATCH.md`. Include:
    objective, tech stack, core features, acceptance criteria, constraints,
-   data structures.
+   public interface and data structures.
 2. **Plan** — Create `PLAN.md` from `SPEC.md`. Each section maps to a core
    feature and includes target state, architecture, file manifest, WBS, and
    verification steps.
