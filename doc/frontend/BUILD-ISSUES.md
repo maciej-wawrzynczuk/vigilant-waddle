@@ -13,6 +13,17 @@ exception rules to `.dockerignore`.
 
 ---
 
+## BI-03 Wrong cluster import tool — k3s instead of kind
+
+**Symptom**: Playbook used `k3s ctr images import` which is not available; the
+local cluster is `kind` (cluster name: `kind`, node: `kind-control-plane`).
+
+**Fix**: Replaced the save-to-tarball + `k3s ctr images import` steps with
+`kind load docker-image <image>`, which loads images directly from the Docker
+daemon into kind nodes without an intermediate tarball.
+
+---
+
 ## BI-02 nginx exits immediately when `waddle-ws` is not resolvable
 
 **Symptom**: `docker run localhost/waddle-frontend:latest` exits immediately

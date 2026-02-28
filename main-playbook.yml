@@ -64,23 +64,13 @@
         rebuild: always
       tags: [k8s]
 
-    - name: Save waddle-ws image to tarball
-      ansible.builtin.command: docker save {{ ws_image }} -o /tmp/waddle-ws.tar
+    - name: Load waddle-ws image into kind
+      ansible.builtin.command: kind load docker-image {{ ws_image }}
       changed_when: true
       tags: [k8s]
 
-    - name: Save frontend image to tarball
-      ansible.builtin.command: docker save {{ frontend_image }} -o /tmp/waddle-frontend.tar
-      changed_when: true
-      tags: [k8s]
-
-    - name: Import waddle-ws image into cluster
-      ansible.builtin.command: k3s ctr images import /tmp/waddle-ws.tar
-      changed_when: true
-      tags: [k8s]
-
-    - name: Import frontend image into cluster
-      ansible.builtin.command: k3s ctr images import /tmp/waddle-frontend.tar
+    - name: Load frontend image into kind
+      ansible.builtin.command: kind load docker-image {{ frontend_image }}
       changed_when: true
       tags: [k8s]
 
