@@ -7,25 +7,10 @@ use std::{
     io::{BufReader, Read},
     path::Path,
 };
-/// # Errors
-///
-/// Propagates Err from `Transactions::try_from_reader`
-pub fn list_trans(p: &Path) -> anyhow::Result<()> {
-    let f = File::open(p)?;
-    let rd = BufReader::new(f);
-    let t = Transactions::try_from_reader(rd)?;
 
-    t.iter().for_each(|t| println!("{t}"));
-
-    let mut p = Portfolio::new();
-    t.iter().for_each(|t| p.add_transaction(t));
-    println!("{p}");
-
-    Ok(())
-}
-
-#[allow(dead_code)]
 pub struct Portfolio {
+    // I use a vec instead of a hash. The list is short.
+    // There will be more scans when lookups.
     data: Vec<(String, i32)>,
 }
 
