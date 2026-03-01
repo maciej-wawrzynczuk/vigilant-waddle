@@ -58,21 +58,22 @@ then server (`src/ws.rs`), then E2E (`hurl/`), then frontend (`frontend/`).
 
 ### Target State
 
-`Portfolio` holds `Vec<PortfolioEntry>` (symbol, quantity, value, currency per
-row). `from_transactions_with_quotes` is the sole public constructor.
+`Portfolio` stores `Vec<(String, i32)>` (symbol + quantity) and an
+`Arc<dyn Quotes + Send + Sync>`. Values are computed lazily inside a custom
+`Serialize` impl. `from_transactions_with_quotes` is the sole public constructor.
 
 ### Architecture
 
-- `pub struct PortfolioEntry { pub symbol: String, pub quantity: i32,`
-  `pub value: String, pub currency: String }` — derives `Serialize`, `Clone`.
-  `value` is pre-formatted: `(Decimal::from(qty) * quote.price).to_string()`.
-- `Portfolio { entries: Vec<PortfolioEntry> }` — `#[derive(Serialize)]` with
-  `#[serde(transparent)]` serialises as a JSON array.
-- `from_transactions_with_quotes`: iterates `&Transactions` inline to aggregate
-  symbol → quantity (`Vec<(String, i32)>`), then for each entry calls
-  `quotes.price(&symbol)?`, computes value string, builds `PortfolioEntry`.
-- Removed: `Portfolio::new()`, `Default`, `add_transaction()`, old custom
-  `Serialize` impl, `from_transactions()`.
+- `Portfolio { data: Vec<(String, i32)>, quotes: Arc<dyn Quotes + Send + Sync> }`.
+- `from_transactions_with_quotes(t: &Transactions,
+  quotes: Arc<dyn Quotes + Send + Sync>) -> Self`:
+  aggregates symbol → quantity inline; infallible.
+- Custom `Serialize` impl: iterates `data`, calls `quotes.price(symbol)` per
+  entry, computes `value = (Decimal::from(qty) * quote.price).to_string()`,
+  serialises via private `PortfolioEntryView<'_>`.
+- Private `PortfolioEntryView<'a>` derives `Serialize`; not part of public API.
+- Removed: `Portfolio::new()`, `Default`, `add_transaction()`, `from_transactions()`,
+  old custom `Serialize` impl.
 - Existing YAML portfolio unit tests replaced with two JSON tests:
   `portfolio_values_computed` and `portfolio_multi_currency_short`.
 
@@ -80,26 +81,28 @@ row). `from_transactions_with_quotes` is the sole public constructor.
 
 | File | Change |
 |------|--------|
-| `src/transactions.rs` | Add `PortfolioEntry`; restructure `Portfolio`; add `from_transactions_with_quotes`; replace YAML tests |
+| `src/transactions.rs` | Restructure `Portfolio`; add `from_transactions_with_quotes`; custom `Serialize`; replace YAML tests |
 
 ### Work Breakdown
 
-1. Define `pub struct PortfolioEntry` with `#[derive(Serialize, Clone)]`.
-2. Redefine `Portfolio { entries: Vec<PortfolioEntry> }` with
-   `#[derive(Serialize)]` and `#[serde(transparent)]`; remove old fields and impls.
+1. Add `use std::sync::Arc` to imports (already present via `std::sync::Arc` in
+   `ws.rs`; add to `transactions.rs`).
+2. Redefine `Portfolio { data: Vec<(String, i32)>,
+   quotes: Arc<dyn Quotes + Send + Sync> }`;
+   remove old fields and impls.
 3. Implement `Portfolio::from_transactions_with_quotes(t: &Transactions,
-   quotes: &dyn Quotes) -> anyhow::Result<Self>`:
-   - Aggregate quantities: iterate `t`, build `Vec<(String, i32)>`.
-   - Enrich: for each `(symbol, qty)` call `quotes.price(&symbol)?`,
-     compute `value = (Decimal::from(qty) * quote.price).to_string()`.
-   - Return `Ok(Self { entries })`.
-4. Remove `Portfolio::new()`, `Default`, `add_transaction()`, `from_transactions()`,
+   quotes: Arc<dyn Quotes + Send + Sync>) -> Self`:
+   - Aggregate quantities inline; return `Self { data, quotes }`.
+4. Implement custom `Serialize for Portfolio` using `serialize_seq`; compute
+   value per entry at serialization time; delegate to `PortfolioEntryView`.
+5. Define private `PortfolioEntryView<'a>` with `#[derive(Serialize)]`.
+6. Remove `Portfolio::new()`, `Default`, `add_transaction()`, `from_transactions()`,
    old `Serialize` impl.
-5. Replace three YAML tests with:
+7. Replace three YAML tests with:
    - `portfolio_values_computed`: `MockQuotes` with a configured symbol;
-     assert `value` and `currency` on the entry.
+     assert `value` and `currency` fields in serialised JSON.
    - `portfolio_multi_currency_short`: negative quantity and two currencies;
-     assert both entries are correct.
+     assert both entries correct.
 
 ### Verification
 
@@ -107,46 +110,44 @@ row). `from_transactions_with_quotes` is the sole public constructor.
 
 ---
 
-## Feature 3: `GET /portfolio` JSON Format and `AppState` Extension
+## Feature 3: `GET /portfolio` JSON Format
 
 ### Target State
 
-`AppState` carries `quotes: Arc<dyn Quotes + Send + Sync>`. `get_portfolio`
-returns `application/json`; handler signature is
+`get_portfolio` returns `application/json`. `AppState` is **unchanged** — no
+`quotes` field added. Handler signature:
 `async fn get_portfolio(...) -> Result<Json<Portfolio>, StatusCode>`.
 
 ### Architecture
 
-- `AppState` struct gains `quotes: Arc<dyn Quotes + Send + Sync>`.
-  `Arc<T>: Clone` for any `T: ?Sized` — `#[derive(Clone)]` continues to work.
-- `main()` initialises `quotes: Arc::new(MockQuotes::new())`.
-- `get_portfolio`: lock `transactions`, 404 if `None`, call
-  `Portfolio::from_transactions_with_quotes(t, &*s.quotes as &dyn Quotes)`,
-  map `Err` → 500 (log with `error!`), map `Ok` → `Json(portfolio)`.
-- `Axum`'s `Json<T>` extractor sets `Content-Type: application/json` automatically.
-- `serde_yaml` is no longer used; remove its `use` statement from `ws.rs`.
-  `serde_yaml` may also be removed from `Cargo.toml` (no remaining usage).
+- `AppState` is unchanged; `#[derive(Clone)]` continues to work as-is.
+- `main()` requires no changes.
+- `get_portfolio`: lock `transactions`, 404 if `None`, construct
+  `Arc::new(MockQuotes::new())` locally, call
+  `Portfolio::from_transactions_with_quotes(t, quotes)`, return `Json(portfolio)`.
+- Quote errors surface as 500 via Axum's JSON serialization error path (no
+  explicit `map_err` needed in the handler).
+- `Axum`'s `Json<T>` sets `Content-Type: application/json` automatically.
+- `serde_yaml` is no longer used; remove its `use` statement from `ws.rs`
+  and the dependency from `Cargo.toml`.
 - `ws.rs` import: add `MockQuotes`, `Quotes` to `vigilant_waddle::transactions`.
 
 ### File Manifest
 
 | File | Change |
 |------|--------|
-| `src/ws.rs` | Extend `AppState`; rewrite `get_portfolio`; update `main()`; update tests |
+| `src/ws.rs` | Rewrite `get_portfolio`; update imports; update tests |
 | `Cargo.toml` | Remove `serde_yaml` (no longer used) |
 
 ### Work Breakdown
 
 1. Update `use vigilant_waddle::transactions` to include `MockQuotes`, `Quotes`.
-2. Add `quotes: Arc<dyn Quotes + Send + Sync>` field to `AppState`.
-3. Rewrite `get_portfolio` to use `from_transactions_with_quotes` and return
+2. Rewrite `get_portfolio` to construct `MockQuotes` locally and return
    `Result<Json<Portfolio>, StatusCode>`.
-4. Update `main()` to include `quotes: Arc::new(MockQuotes::new())`.
-5. Remove `use serde_yaml` from `ws.rs`.
-6. Remove `serde_yaml` from `Cargo.toml`.
-7. Update `empty_state()` test helper to include
-   `quotes: Arc::new(MockQuotes::new())`.
-8. Update `test_get_portfolio_after_upload`: assert `application/json`
+3. Remove `use serde_yaml` from `ws.rs` (no `serde_yaml` import remains).
+4. Remove `serde_yaml` from `Cargo.toml`.
+5. `empty_state()` test helper requires **no change** (no quotes field).
+6. Update `test_get_portfolio_after_upload`: assert `application/json`
    content-type; parse body as `serde_json::Value`; assert `symbol`,
    `quantity`, `value`, `currency` fields on the first entry.
 

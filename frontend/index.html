@@ -23,49 +23,45 @@
         <tr>
           <th>Symbol</th>
           <th>Quantity</th>
+          <th>Value</th>
+          <th>Currency</th>
         </tr>
       </thead>
       <tbody id="portfolio-body">
         <tr>
-          <td colspan="2">No data loaded yet.</td>
+          <td colspan="4">No data loaded yet.</td>
         </tr>
       </tbody>
     </table>
   </main>
 
   <script>
-    function parseYaml(text) {
-      const result = {};
-      for (const line of text.trim().split('\n')) {
-        const idx = line.indexOf(': ');
-        if (idx !== -1) {
-          result[line.slice(0, idx).trim()] = Number(line.slice(idx + 2).trim());
-        }
-      }
-      return result;
-    }
-
     function renderPortfolio(data) {
       const tbody = document.getElementById('portfolio-body');
       tbody.replaceChildren();
-      const entries = Object.entries(data);
-      if (entries.length === 0) {
+      if (data.length === 0) {
         const tr = document.createElement('tr');
         const td = document.createElement('td');
-        td.colSpan = 2;
+        td.colSpan = 4;
         td.textContent = 'No data loaded yet.';
         tr.appendChild(td);
         tbody.appendChild(tr);
         return;
       }
-      for (const [symbol, qty] of entries) {
+      for (const entry of data) {
         const tr = document.createElement('tr');
         const tdSym = document.createElement('td');
-        tdSym.textContent = symbol;
+        tdSym.textContent = entry.symbol;
         const tdQty = document.createElement('td');
-        tdQty.textContent = qty;
+        tdQty.textContent = entry.quantity;
+        const tdVal = document.createElement('td');
+        tdVal.textContent = entry.value;
+        const tdCur = document.createElement('td');
+        tdCur.textContent = entry.currency;
         tr.appendChild(tdSym);
         tr.appendChild(tdQty);
+        tr.appendChild(tdVal);
+        tr.appendChild(tdCur);
         tbody.appendChild(tr);
       }
     }
@@ -75,7 +71,7 @@
       try {
         const res = await fetch('/portfolio');
         if (res.status === 404) {
-          renderPortfolio({});
+          renderPortfolio([]);
           return;
         }
         if (!res.ok) {
@@ -83,7 +79,7 @@
           status.textContent = `Error loading portfolio: HTTP ${res.status} \u2014 ${body.slice(0, 120)}`;
           return;
         }
-        renderPortfolio(parseYaml(await res.text()));
+        renderPortfolio(await res.json());
       } catch (err) {
         status.textContent = `Network error: ${err.message}`;
       }

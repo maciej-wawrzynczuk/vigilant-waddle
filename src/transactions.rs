@@ -2,40 +2,89 @@ use anyhow::{Context as _, Result};
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::io::Read;
+use std::sync::Arc;
 
-pub struct Portfolio {
-    // I use a vec instead of a hash. The list is short.
-    // There will be more scans when lookups.
-    data: Vec<(String, i32)>,
+#[derive(Clone)]
+pub struct Quote {
+    pub price: Decimal,
+    pub currency: String,
 }
 
-impl Default for Portfolio {
+pub trait Quotes {
+    /// Returns the current quote for `symbol`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the quote source is unavailable or the symbol is invalid.
+    fn price(&self, symbol: &str) -> anyhow::Result<Quote>;
+}
+
+pub struct MockQuotes {
+    data: HashMap<String, Quote>,
+}
+
+impl Default for MockQuotes {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Portfolio {
-    #[must_use]
-    pub fn from_transactions(t: &Transactions) -> Self {
-        let mut p = Self::new();
-        t.iter().for_each(|tx| p.add_transaction(tx));
-        p
-    }
-
+impl MockQuotes {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            data: Vec::<(String, i32)>::new(),
+            data: HashMap::new(),
         }
     }
 
-    pub fn add_transaction(&mut self, t: &MyTransaction) {
-        match self.data.iter_mut().find(|p| p.0 == t.symbol) {
-            Some(p) => p.1 += t.number,
-            None => self.data.push((t.symbol.clone(), t.number)),
+    pub fn insert(
+        &mut self,
+        symbol: impl Into<String>,
+        price: Decimal,
+        currency: impl Into<String>,
+    ) {
+        self.data.insert(
+            symbol.into(),
+            Quote {
+                price,
+                currency: currency.into(),
+            },
+        );
+    }
+}
+
+impl Quotes for MockQuotes {
+    fn price(&self, symbol: &str) -> anyhow::Result<Quote> {
+        Ok(self.data.get(symbol).cloned().unwrap_or(Quote {
+            price: "1.00".parse().expect("hardcoded literal"),
+            currency: "USD".into(),
+        }))
+    }
+}
+
+pub struct Portfolio {
+    // I use a vec instead of a hash. The list is short.
+    // There will be more scans than lookups.
+    data: Vec<(String, i32)>,
+    quotes: Arc<dyn Quotes + Send + Sync>,
+}
+
+impl Portfolio {
+    #[must_use]
+    pub fn from_transactions_with_quotes(
+        t: &Transactions,
+        quotes: Arc<dyn Quotes + Send + Sync>,
+    ) -> Self {
+        let mut data: Vec<(String, i32)> = Vec::new();
+        for tx in t.iter() {
+            match data.iter_mut().find(|e| e.0 == tx.symbol) {
+                Some(e) => e.1 += tx.number,
+                None => data.push((tx.symbol.clone(), tx.number)),
+            }
         }
+        Self { data, quotes }
     }
 }
 
@@ -44,13 +93,29 @@ impl Serialize for Portfolio {
     where
         S: serde::Serializer,
     {
-        use serde::ser::SerializeMap;
-        let mut map = serializer.serialize_map(Some(self.data.len()))?;
+        use serde::ser::{Error as _, SerializeSeq};
+        let mut seq = serializer.serialize_seq(Some(self.data.len()))?;
         for (symbol, qty) in &self.data {
-            map.serialize_entry(symbol, qty)?;
+            let quote = self.quotes.price(symbol).map_err(S::Error::custom)?;
+            let value = (Decimal::from(*qty) * quote.price).to_string();
+            seq.serialize_element(&PortfolioEntryView {
+                symbol,
+                quantity: *qty,
+                value,
+                currency: quote.currency,
+            })?;
         }
-        map.end()
+        seq.end()
     }
+}
+
+// Private serialization-only view — not part of public interface
+#[derive(Serialize)]
+struct PortfolioEntryView<'a> {
+    symbol: &'a str,
+    quantity: i32,
+    value: String,
+    currency: String,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -138,11 +203,11 @@ impl Transactions {
 
 #[cfg(test)]
 mod test {
-    use crate::transactions::{MyTransaction, Portfolio, Transactions};
-    use chrono::NaiveDate;
+    use crate::transactions::{MockQuotes, Portfolio, Quotes, Transactions};
     use indoc::indoc;
     use rust_decimal::Decimal;
     use std::io::Cursor;
+    use std::sync::Arc;
 
     #[test]
     fn test_from_csv() {
@@ -158,42 +223,59 @@ mod test {
         assert_eq!(tx.price, "42.42".parse::<Decimal>().unwrap());
     }
 
-    fn make_tx(symbol: &str, number: i32) -> MyTransaction {
-        MyTransaction {
-            date: NaiveDate::from_ymd_opt(2000, 1, 1).unwrap(),
-            symbol: symbol.to_string(),
-            number,
-            price: "42.42".parse::<Decimal>().unwrap(),
-            commission: "4.2".parse::<Decimal>().unwrap(),
-            currency: "BAR".to_string(),
-        }
+    fn make_transactions(rows: &[(&str, i32)]) -> Transactions {
+        let header = "date;symbol;number;price;commission;currency\n";
+        let body: String = rows
+            .iter()
+            .map(|(sym, n)| format!("2000-01-01;{sym};{n};42.42;4.2;BAR\n"))
+            .collect();
+        Transactions::try_from_reader(Cursor::new(format!("{header}{body}"))).unwrap()
     }
 
     #[test]
-    fn portfolio_yaml_single() {
-        let mut sut = Portfolio::new();
-        sut.add_transaction(&make_tx("FOO", 1));
-        let yaml = serde_yaml::to_string(&sut).unwrap();
-        assert!(yaml.contains("FOO: 1"), "yaml was: {yaml}");
+    fn mock_quotes_known_symbol() {
+        let mut q = MockQuotes::new();
+        q.insert("FOO", "5.00".parse::<Decimal>().unwrap(), "EUR");
+        let quote = q.price("FOO").unwrap();
+        assert_eq!(quote.price, "5.00".parse::<Decimal>().unwrap());
+        assert_eq!(quote.currency, "EUR");
     }
 
     #[test]
-    fn portfolio_yaml_multiple_symbols() {
-        let mut sut = Portfolio::new();
-        sut.add_transaction(&make_tx("FOO", 1));
-        sut.add_transaction(&make_tx("BAZ", 1));
-        let yaml = serde_yaml::to_string(&sut).unwrap();
-        assert!(yaml.contains("FOO: 1"), "yaml was: {yaml}");
-        assert!(yaml.contains("BAZ: 1"), "yaml was: {yaml}");
+    fn mock_quotes_unknown_symbol() {
+        let q = MockQuotes::new();
+        let quote = q.price("UNKNOWN").unwrap();
+        assert_eq!(quote.price, Decimal::ONE);
+        assert_eq!(quote.currency, "USD");
     }
 
     #[test]
-    fn portfolio_yaml_accumulated() {
-        let mut sut = Portfolio::new();
-        sut.add_transaction(&make_tx("FOO", 1));
-        sut.add_transaction(&make_tx("FOO", 1));
-        let yaml = serde_yaml::to_string(&sut).unwrap();
-        assert!(yaml.contains("FOO: 2"), "yaml was: {yaml}");
+    fn portfolio_values_computed() {
+        let mut q = MockQuotes::new();
+        q.insert("FOO", "100.00".parse::<Decimal>().unwrap(), "USD");
+        let t = make_transactions(&[("FOO", 3)]);
+        let p = Portfolio::from_transactions_with_quotes(&t, Arc::new(q));
+        let json: serde_json::Value = serde_json::to_value(p).unwrap();
+        assert_eq!(json[0]["value"], "300.00");
+        assert_eq!(json[0]["currency"], "USD");
+    }
+
+    #[test]
+    fn portfolio_multi_currency_short() {
+        let mut q = MockQuotes::new();
+        q.insert("FOO", "100.00".parse::<Decimal>().unwrap(), "USD");
+        q.insert("BAR", "50.00".parse::<Decimal>().unwrap(), "EUR");
+        let t = make_transactions(&[("FOO", 3), ("BAR", -1)]);
+        let p = Portfolio::from_transactions_with_quotes(&t, Arc::new(q));
+        let json: serde_json::Value = serde_json::to_value(p).unwrap();
+        assert_eq!(json[0]["symbol"], "FOO");
+        assert_eq!(json[0]["quantity"], 3);
+        assert_eq!(json[0]["value"], "300.00");
+        assert_eq!(json[0]["currency"], "USD");
+        assert_eq!(json[1]["symbol"], "BAR");
+        assert_eq!(json[1]["quantity"], -1);
+        assert_eq!(json[1]["value"], "-50.00");
+        assert_eq!(json[1]["currency"], "EUR");
     }
 
     #[test]

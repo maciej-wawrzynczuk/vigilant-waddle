@@ -1,7 +1,6 @@
 use axum::{
     Json, Router,
     extract::{DefaultBodyLimit, Multipart, State},
-    response::{IntoResponse, Response},
 };
 use http::{HeaderMap, StatusCode};
 use std::{
@@ -12,7 +11,7 @@ use std::{
 use tower_http::trace::TraceLayer;
 use tracing::{error, info};
 use tracing_subscriber::{filter::EnvFilter, fmt, prelude::*};
-use vigilant_waddle::transactions::{Portfolio, Transactions};
+use vigilant_waddle::transactions::{MockQuotes, Portfolio, Quotes, Transactions};
 
 #[derive(Clone)]
 struct AppState {
@@ -57,26 +56,16 @@ async fn main() {
     axum::serve(listener, app).await.expect("server error");
 }
 
-async fn get_portfolio(State(s): State<AppState>) -> Response {
-    let data = match s.transactions.lock() {
-        Ok(guard) => guard,
-        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    };
+async fn get_portfolio(State(s): State<AppState>) -> Result<Json<Portfolio>, StatusCode> {
+    let data = s
+        .transactions
+        .lock()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let Some(t) = data.as_ref() else {
-        return StatusCode::NOT_FOUND.into_response();
+        return Err(StatusCode::NOT_FOUND);
     };
-    let portfolio = Portfolio::from_transactions(t);
-    match serde_yaml::to_string(&portfolio) {
-        Err(e) => {
-            error!("YAML serialization error: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-        Ok(yaml) => (
-            [(axum::http::header::CONTENT_TYPE, "application/yaml")],
-            yaml,
-        )
-            .into_response(),
-    }
+    let quotes: Arc<dyn Quotes + Send + Sync> = Arc::new(MockQuotes::new());
+    Ok(Json(Portfolio::from_transactions_with_quotes(t, quotes)))
 }
 
 async fn get_transactions(State(s): State<AppState>) -> Result<Json<Transactions>, StatusCode> {
@@ -213,13 +202,22 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
-        assert_eq!(
-            response.headers().get("content-type").unwrap(),
-            "application/yaml"
+        assert!(
+            response
+                .headers()
+                .get("content-type")
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .contains("application/json"),
+            "expected application/json content-type"
         );
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-        let yaml = std::str::from_utf8(&body).unwrap();
-        assert!(yaml.contains("FOO: 1"), "yaml was: {yaml}");
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json[0]["symbol"], "FOO");
+        assert_eq!(json[0]["quantity"], 1);
+        assert_eq!(json[0]["value"], "1.00");
+        assert_eq!(json[0]["currency"], "USD");
     }
 
     #[tokio::test]

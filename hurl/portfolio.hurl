@@ -9,5 +9,8 @@ HTTP 200
 GET http://localhost:3000/portfolio
 HTTP 200
 [Asserts]
-header "Content-Type" contains "application/yaml"
-body contains "FOO: 1"
+header "Content-Type" contains "application/json"
+jsonpath "$[0].symbol" == "FOO"
+jsonpath "$[0].quantity" == 1
+jsonpath "$[0].value" == "1.00"
+jsonpath "$[0].currency" == "USD"
