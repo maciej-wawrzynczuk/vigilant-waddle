@@ -1,28 +1,28 @@
 use anyhow::{Context as _, Result};
+use async_trait::async_trait;
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::Read;
-use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct Quote {
     pub price: Decimal,
-    pub currency: String,
 }
 
-pub trait Quotes {
+#[async_trait]
+pub trait Quotes: Send + Sync {
     /// Returns the current quote for `symbol`.
     ///
     /// # Errors
     ///
     /// Returns an error if the quote source is unavailable or the symbol is invalid.
-    fn price(&self, symbol: &str) -> anyhow::Result<Quote>;
+    async fn price(&self, symbol: &str) -> anyhow::Result<Quote>;
 }
 
 pub struct MockQuotes {
-    data: HashMap<String, Quote>,
+    data: HashMap<String, Decimal>,
 }
 
 impl Default for MockQuotes {
@@ -39,83 +39,68 @@ impl MockQuotes {
         }
     }
 
-    pub fn insert(
-        &mut self,
-        symbol: impl Into<String>,
-        price: Decimal,
-        currency: impl Into<String>,
-    ) {
-        self.data.insert(
-            symbol.into(),
-            Quote {
-                price,
-                currency: currency.into(),
-            },
-        );
+    pub fn insert(&mut self, symbol: impl Into<String>, price: Decimal) {
+        self.data.insert(symbol.into(), price);
     }
 }
 
+#[async_trait]
 impl Quotes for MockQuotes {
-    fn price(&self, symbol: &str) -> anyhow::Result<Quote> {
-        Ok(self.data.get(symbol).cloned().unwrap_or(Quote {
-            price: "1.00".parse().expect("hardcoded literal"),
-            currency: "USD".into(),
-        }))
+    async fn price(&self, symbol: &str) -> anyhow::Result<Quote> {
+        Ok(Quote {
+            price: self.data.get(symbol).copied().unwrap_or(Decimal::ONE),
+        })
     }
 }
 
 pub struct Portfolio {
     // I use a vec instead of a hash. The list is short.
     // There will be more scans than lookups.
-    data: Vec<(String, i32)>,
-    quotes: Arc<dyn Quotes + Send + Sync>,
+    data: Vec<(String, i32, String)>,
 }
+
+#[derive(Serialize)]
+pub struct PortfolioEntry {
+    pub symbol: String,
+    pub quantity: i32,
+    pub value: String,
+    pub currency: String,
+}
+
+#[derive(Serialize)]
+#[serde(transparent)]
+pub struct PortfolioValuation(Vec<PortfolioEntry>);
 
 impl Portfolio {
     #[must_use]
-    pub fn from_transactions_with_quotes(
-        t: &Transactions,
-        quotes: Arc<dyn Quotes + Send + Sync>,
-    ) -> Self {
-        let mut data: Vec<(String, i32)> = Vec::new();
+    pub fn from_transactions(t: &Transactions) -> Self {
+        let mut data: Vec<(String, i32, String)> = Vec::new();
         for tx in t.iter() {
             match data.iter_mut().find(|e| e.0 == tx.symbol) {
                 Some(e) => e.1 += tx.number,
-                None => data.push((tx.symbol.clone(), tx.number)),
+                None => data.push((tx.symbol.clone(), tx.number, tx.currency.clone())),
             }
         }
-        Self { data, quotes }
+        Self { data }
     }
-}
 
-impl Serialize for Portfolio {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        use serde::ser::{Error as _, SerializeSeq};
-        let mut seq = serializer.serialize_seq(Some(self.data.len()))?;
-        for (symbol, qty) in &self.data {
-            let quote = self.quotes.price(symbol).map_err(S::Error::custom)?;
+    /// # Errors
+    ///
+    /// Returns an error if any quote lookup fails.
+    pub async fn valuation(&self, quotes: &dyn Quotes) -> anyhow::Result<PortfolioValuation> {
+        let mut entries = Vec::with_capacity(self.data.len());
+        for (symbol, qty, currency) in &self.data {
+            let quote = quotes.price(symbol).await?;
             let value = (Decimal::from(*qty) * quote.price).to_string();
-            seq.serialize_element(&PortfolioEntryView {
-                symbol,
+            entries.push(PortfolioEntry {
+                symbol: symbol.clone(),
                 quantity: *qty,
                 value,
-                currency: quote.currency,
-            })?;
+                currency: currency.clone(),
+            });
         }
-        seq.end()
+        Ok(PortfolioValuation(entries))
     }
-}
-
-// Private serialization-only view — not part of public interface
-#[derive(Serialize)]
-struct PortfolioEntryView<'a> {
-    symbol: &'a str,
-    quantity: i32,
-    value: String,
-    currency: String,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -203,11 +188,10 @@ impl Transactions {
 
 #[cfg(test)]
 mod test {
-    use crate::transactions::{MockQuotes, Portfolio, Quotes, Transactions};
+    use crate::transactions::{MockQuotes, Portfolio, Quotes as _, Transactions};
     use indoc::indoc;
     use rust_decimal::Decimal;
     use std::io::Cursor;
-    use std::sync::Arc;
 
     #[test]
     fn test_from_csv() {
@@ -232,50 +216,68 @@ mod test {
         Transactions::try_from_reader(Cursor::new(format!("{header}{body}"))).unwrap()
     }
 
-    #[test]
-    fn mock_quotes_known_symbol() {
+    #[tokio::test]
+    async fn mock_quotes_known_symbol() {
         let mut q = MockQuotes::new();
-        q.insert("FOO", "5.00".parse::<Decimal>().unwrap(), "EUR");
-        let quote = q.price("FOO").unwrap();
+        q.insert("FOO", "5.00".parse::<Decimal>().unwrap());
+        let quote = q.price("FOO").await.unwrap();
         assert_eq!(quote.price, "5.00".parse::<Decimal>().unwrap());
-        assert_eq!(quote.currency, "EUR");
     }
 
-    #[test]
-    fn mock_quotes_unknown_symbol() {
+    #[tokio::test]
+    async fn mock_quotes_unknown_symbol() {
         let q = MockQuotes::new();
-        let quote = q.price("UNKNOWN").unwrap();
+        let quote = q.price("UNKNOWN").await.unwrap();
         assert_eq!(quote.price, Decimal::ONE);
-        assert_eq!(quote.currency, "USD");
     }
 
-    #[test]
-    fn portfolio_values_computed() {
+    #[tokio::test]
+    async fn portfolio_values_computed() {
         let mut q = MockQuotes::new();
-        q.insert("FOO", "100.00".parse::<Decimal>().unwrap(), "USD");
+        q.insert("FOO", "100.00".parse::<Decimal>().unwrap());
         let t = make_transactions(&[("FOO", 3)]);
-        let p = Portfolio::from_transactions_with_quotes(&t, Arc::new(q));
-        let json: serde_json::Value = serde_json::to_value(p).unwrap();
+        let p = Portfolio::from_transactions(&t);
+        let val = p.valuation(&q).await.unwrap();
+        let json: serde_json::Value = serde_json::to_value(val).unwrap();
         assert_eq!(json[0]["value"], "300.00");
-        assert_eq!(json[0]["currency"], "USD");
+        assert_eq!(json[0]["currency"], "BAR");
     }
 
-    #[test]
-    fn portfolio_multi_currency_short() {
+    #[tokio::test]
+    async fn portfolio_multi_currency_short() {
         let mut q = MockQuotes::new();
-        q.insert("FOO", "100.00".parse::<Decimal>().unwrap(), "USD");
-        q.insert("BAR", "50.00".parse::<Decimal>().unwrap(), "EUR");
-        let t = make_transactions(&[("FOO", 3), ("BAR", -1)]);
-        let p = Portfolio::from_transactions_with_quotes(&t, Arc::new(q));
-        let json: serde_json::Value = serde_json::to_value(p).unwrap();
+        q.insert("FOO", "100.00".parse::<Decimal>().unwrap());
+        q.insert("BAR_SYM", "50.00".parse::<Decimal>().unwrap());
+        let csv = "date;symbol;number;price;commission;currency\n\
+                   2000-01-01;FOO;3;1.00;0;USD\n\
+                   2000-01-01;BAR_SYM;-1;1.00;0;EUR\n";
+        let t = Transactions::try_from_reader(Cursor::new(csv)).unwrap();
+        let p = Portfolio::from_transactions(&t);
+        let val = p.valuation(&q).await.unwrap();
+        let json: serde_json::Value = serde_json::to_value(val).unwrap();
         assert_eq!(json[0]["symbol"], "FOO");
         assert_eq!(json[0]["quantity"], 3);
         assert_eq!(json[0]["value"], "300.00");
         assert_eq!(json[0]["currency"], "USD");
-        assert_eq!(json[1]["symbol"], "BAR");
+        assert_eq!(json[1]["symbol"], "BAR_SYM");
         assert_eq!(json[1]["quantity"], -1);
         assert_eq!(json[1]["value"], "-50.00");
         assert_eq!(json[1]["currency"], "EUR");
+    }
+
+    #[tokio::test]
+    async fn portfolio_zero_quantity() {
+        let mut q = MockQuotes::new();
+        q.insert("FOO", "10.00".parse::<Decimal>().unwrap());
+        let csv = "date;symbol;number;price;commission;currency\n\
+                   2000-01-01;FOO;1;1.00;0;USD\n\
+                   2000-01-02;FOO;-1;1.00;0;USD\n";
+        let t = Transactions::try_from_reader(Cursor::new(csv)).unwrap();
+        let p = Portfolio::from_transactions(&t);
+        let val = p.valuation(&q).await.unwrap();
+        let json: serde_json::Value = serde_json::to_value(val).unwrap();
+        assert_eq!(json[0]["value"], "0");
+        assert_eq!(json[0]["currency"], "USD");
     }
 
     #[test]

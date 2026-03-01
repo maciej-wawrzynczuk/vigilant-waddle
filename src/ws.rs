@@ -6,16 +6,21 @@ use http::{HeaderMap, StatusCode};
 use std::{
     env,
     io::Cursor,
+    path::PathBuf,
     sync::{Arc, Mutex},
 };
 use tower_http::trace::TraceLayer;
 use tracing::{error, info};
 use tracing_subscriber::{filter::EnvFilter, fmt, prelude::*};
-use vigilant_waddle::transactions::{MockQuotes, Portfolio, Quotes, Transactions};
+use vigilant_waddle::{
+    stooq::StooqQuotes,
+    transactions::{MockQuotes, Portfolio, PortfolioValuation, Quotes, Transactions},
+};
 
 #[derive(Clone)]
 struct AppState {
     transactions: Arc<Mutex<Option<Transactions>>>,
+    quotes: Arc<dyn Quotes>,
 }
 
 fn create_app(state: AppState) -> Router {
@@ -44,8 +49,33 @@ async fn main() {
         Err(env::VarError::NotPresent) => "127.0.0.1:3000".to_string(),
     };
 
+    let provider = env::var("WADDLE_QUOTES_PROVIDER").unwrap_or_else(|_| {
+        eprintln!("WADDLE_QUOTES_PROVIDER env var is required (stooq|mock)");
+        std::process::exit(1);
+    });
+
+    let quotes: Arc<dyn Quotes> = match provider.as_str() {
+        "stooq" => {
+            let map_path = env::var("STOOQ_SYMBOL_MAP").unwrap_or_else(|_| {
+                eprintln!("STOOQ_SYMBOL_MAP env var is required when using stooq provider");
+                std::process::exit(1);
+            });
+            let sq = StooqQuotes::from_toml_file(&PathBuf::from(map_path)).unwrap_or_else(|e| {
+                eprintln!("Failed to load stooq symbol map: {e}");
+                std::process::exit(1);
+            });
+            Arc::new(sq)
+        }
+        "mock" => Arc::new(MockQuotes::new()),
+        other => {
+            eprintln!("Unknown WADDLE_QUOTES_PROVIDER '{other}'; expected stooq or mock");
+            std::process::exit(1);
+        }
+    };
+
     let state = AppState {
         transactions: Arc::new(Mutex::new(None)),
+        quotes,
     };
 
     let app = create_app(state);
@@ -56,16 +86,20 @@ async fn main() {
     axum::serve(listener, app).await.expect("server error");
 }
 
-async fn get_portfolio(State(s): State<AppState>) -> Result<Json<Portfolio>, StatusCode> {
-    let data = s
-        .transactions
-        .lock()
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let Some(t) = data.as_ref() else {
-        return Err(StatusCode::NOT_FOUND);
+async fn get_portfolio(State(s): State<AppState>) -> Result<Json<PortfolioValuation>, StatusCode> {
+    let t = {
+        let data = s
+            .transactions
+            .lock()
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        data.as_ref().cloned().ok_or(StatusCode::NOT_FOUND)?
     };
-    let quotes: Arc<dyn Quotes + Send + Sync> = Arc::new(MockQuotes::new());
-    Ok(Json(Portfolio::from_transactions_with_quotes(t, quotes)))
+    let portfolio = Portfolio::from_transactions(&t);
+    let val = portfolio
+        .valuation(&*s.quotes)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(val))
 }
 
 async fn get_transactions(State(s): State<AppState>) -> Result<Json<Transactions>, StatusCode> {
@@ -139,6 +173,7 @@ mod tests {
     fn empty_state() -> AppState {
         AppState {
             transactions: Arc::new(Mutex::new(None)),
+            quotes: Arc::new(MockQuotes::new()),
         }
     }
 
@@ -216,8 +251,8 @@ mod tests {
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json[0]["symbol"], "FOO");
         assert_eq!(json[0]["quantity"], 1);
-        assert_eq!(json[0]["value"], "1.00");
-        assert_eq!(json[0]["currency"], "USD");
+        assert_eq!(json[0]["value"], "1");
+        assert_eq!(json[0]["currency"], "BAR");
     }
 
     #[tokio::test]

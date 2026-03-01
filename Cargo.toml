@@ -9,14 +9,17 @@ path = "src/ws.rs"
 
 [dependencies]
 anyhow = "1.0.100"
+async-trait = "0.1"
 axum = { version = "0.8.8", features = ["multipart"] }
 chrono = { version = "0.4.43", features = ["serde"] }
 csv = "1.4.0"
 http = "1.4.0"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 rust_decimal = "1.40.0"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 tokio = { version = "1.49.0", features = ["full"] }
+toml = "0.8"
 tower-http = { version = "0.6.8", features = ["trace"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter", "registry"] }
