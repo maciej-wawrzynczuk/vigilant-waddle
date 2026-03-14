@@ -32,6 +32,8 @@
             name: "test_waddle"
             ports:
               - 3000:3000
+            env:
+              WADDLE_QUOTES_PROVIDER: mock
 
         - name: Wait for the service
           ansible.builtin.wait_for:
@@ -80,23 +82,70 @@
       tags: [k8s]
 
     - name: Apply k8s namespace
-      ansible.builtin.command: kubectl apply -f "{{ playbook_dir }}/k8s/namespace.yaml"
-      changed_when: true
+      kubernetes.core.k8s:
+        src: "{{ playbook_dir }}/k8s/namespace.yaml"
+        state: present
+      tags: [k8s]
+
+    - name: Wait for namespace to be active
+      kubernetes.core.k8s_info:
+        kind: Namespace
+        name: waddle
+      register: ns_info
+      until: ns_info.resources | length > 0 and ns_info.resources[0].status.phase == "Active"
+      retries: 20
+      delay: 3
+      tags: [k8s]
+
+    - name: Apply stooq ConfigMap
+      kubernetes.core.k8s:
+        src: "{{ playbook_dir }}/k8s/stooq-configmap.yaml"
+        state: present
       tags: [k8s]
 
     - name: Apply k8s manifests
-      ansible.builtin.command: kubectl apply -f "{{ playbook_dir }}/k8s/"
-      changed_when: true
+      kubernetes.core.k8s:
+        src: "{{ item }}"
+        state: present
+      loop:
+        - "{{ playbook_dir }}/k8s/waddle-ws.yaml"
+        - "{{ playbook_dir }}/k8s/frontend.yaml"
       tags: [k8s]
 
     - name: Wait for waddle-ws rollout
-      ansible.builtin.command: >-
-        kubectl rollout status deployment/waddle-ws -n waddle --timeout=60s
-      changed_when: false
+      kubernetes.core.k8s_info:
+        api_version: apps/v1
+        kind: Deployment
+        name: waddle-ws
+        namespace: waddle
+        wait: true
+        wait_condition:
+          type: Available
+          status: "True"
+        wait_sleep: 3
+        wait_timeout: 60
       tags: [k8s]
 
     - name: Wait for waddle-frontend rollout
-      ansible.builtin.command: >-
-        kubectl rollout status deployment/waddle-frontend -n waddle --timeout=60s
-      changed_when: false
+      kubernetes.core.k8s_info:
+        api_version: apps/v1
+        kind: Deployment
+        name: waddle-frontend
+        namespace: waddle
+        wait: true
+        wait_condition:
+          type: Available
+          status: "True"
+        wait_sleep: 3
+        wait_timeout: 60
       tags: [k8s]
+
+    - name: Destroy k8s
+      kubernetes.core.k8s:
+        name: waddle
+        kind: namespace
+        state: absent
+        api_version: v1
+        wait: true
+        wait_timeout: 120
+      tags: [k8s_destroy]

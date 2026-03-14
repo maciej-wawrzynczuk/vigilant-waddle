@@ -13,6 +13,10 @@ spec:
       labels:
         app: waddle-ws
     spec:
+      volumes:
+        - name: stooq-symbol-map
+          configMap:
+            name: stooq-symbol-map
       containers:
         - name: waddle-ws
           image: localhost/waddle-ws:latest
@@ -24,6 +28,14 @@ spec:
               value: "0.0.0.0:3000"
             - name: RUST_LOG
               value: info
+            - name: WADDLE_QUOTES_PROVIDER
+              value: stooq
+            - name: STOOQ_SYMBOL_MAP
+              value: /etc/waddle/stooq-symbol-map.toml
+          volumeMounts:
+            - name: stooq-symbol-map
+              mountPath: /etc/waddle
+              readOnly: true
 ---
 apiVersion: v1
 kind: Service

@@ -12,5 +12,5 @@ HTTP 200
 header "Content-Type" contains "application/json"
 jsonpath "$[0].symbol" == "FOO"
 jsonpath "$[0].quantity" == 1
-jsonpath "$[0].value" == "1.00"
-jsonpath "$[0].currency" == "USD"
+jsonpath "$[0].value" == "1"
+jsonpath "$[0].currency" == "BAR"

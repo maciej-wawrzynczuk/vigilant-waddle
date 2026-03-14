@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: stooq-symbol-map
+  namespace: waddle
+data:
+  stooq-symbol-map.toml: |
+    [symbols.IBM]
+    suffix = ".US"
+
+    [symbols.MSFT]
+    suffix = ".US"
+
+    [symbols.EOAN]
+    suffix = ".DE"
+
+    [symbols.BP]
+    suffix = ".UK"
+    divisor = 100
+
+    [symbols.CAP]
+    suffix = ".FR"
