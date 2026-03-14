@@ -50,25 +50,25 @@ async fn main() {
     };
 
     let provider = env::var("WADDLE_QUOTES_PROVIDER").unwrap_or_else(|_| {
-        eprintln!("WADDLE_QUOTES_PROVIDER env var is required (stooq|mock)");
+        error!("WADDLE_QUOTES_PROVIDER env var is required (stooq|mock)");
         std::process::exit(1);
     });
 
     let quotes: Arc<dyn Quotes> = match provider.as_str() {
         "stooq" => {
             let map_path = env::var("STOOQ_SYMBOL_MAP").unwrap_or_else(|_| {
-                eprintln!("STOOQ_SYMBOL_MAP env var is required when using stooq provider");
+                error!("STOOQ_SYMBOL_MAP env var is required when using stooq provider");
                 std::process::exit(1);
             });
             let sq = StooqQuotes::from_toml_file(&PathBuf::from(map_path)).unwrap_or_else(|e| {
-                eprintln!("Failed to load stooq symbol map: {e}");
+                error!("Failed to load stooq symbol map: {e:#}");
                 std::process::exit(1);
             });
             Arc::new(sq)
         }
         "mock" => Arc::new(MockQuotes::new()),
         other => {
-            eprintln!("Unknown WADDLE_QUOTES_PROVIDER '{other}'; expected stooq or mock");
+            error!("Unknown WADDLE_QUOTES_PROVIDER '{other}'; expected stooq or mock");
             std::process::exit(1);
         }
     };
@@ -88,17 +88,17 @@ async fn main() {
 
 async fn get_portfolio(State(s): State<AppState>) -> Result<Json<PortfolioValuation>, StatusCode> {
     let t = {
-        let data = s
-            .transactions
-            .lock()
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let data = s.transactions.lock().map_err(|e| {
+            error!("Mutex poisoned: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
         data.as_ref().cloned().ok_or(StatusCode::NOT_FOUND)?
     };
     let portfolio = Portfolio::from_transactions(&t);
-    let val = portfolio
-        .valuation(&*s.quotes)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let val = portfolio.valuation(&*s.quotes).await.map_err(|e| {
+        error!("Portfolio valuation failed: {e:#}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
     Ok(Json(val))
 }
 

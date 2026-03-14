@@ -112,6 +112,16 @@
         - "{{ playbook_dir }}/k8s/frontend.yaml"
       tags: [k8s]
 
+    - name: Restart waddle-ws deployment to pick up new image
+      ansible.builtin.command: kubectl rollout restart deployment/waddle-ws -n waddle
+      changed_when: true
+      tags: [k8s]
+
+    - name: Restart waddle-frontend deployment to pick up new image
+      ansible.builtin.command: kubectl rollout restart deployment/waddle-frontend -n waddle
+      changed_when: true
+      tags: [k8s]
+
     - name: Wait for waddle-ws rollout
       kubernetes.core.k8s_info:
         api_version: apps/v1

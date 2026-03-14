@@ -15,9 +15,14 @@ pub struct SymbolConfig {
 
 pub type SymbolMap = HashMap<String, SymbolConfig>;
 
+#[derive(Deserialize)]
+struct SymbolMapFile {
+    symbols: SymbolMap,
+}
+
 pub struct StooqQuotes {
     client: reqwest::Client,
-    map: SymbolMap,
+    pub(crate) map: SymbolMap,
 }
 
 impl StooqQuotes {
@@ -35,9 +40,9 @@ impl StooqQuotes {
     pub fn from_toml_file(path: &Path) -> anyhow::Result<Self> {
         let text = std::fs::read_to_string(path)
             .with_context(|| format!("failed to read symbol map from {}", path.display()))?;
-        let map = toml::from_str::<SymbolMap>(&text)
-            .with_context(|| format!("failed to parse TOML from {}", path.display()))?;
-        Ok(Self::new(map))
+        let file = toml::from_str::<SymbolMapFile>(&text)
+            .with_context(|| format!("failed to parse {}", path.display()))?;
+        Ok(Self::new(file.symbols))
     }
 }
 
@@ -102,6 +107,60 @@ fn parse_close(csv_text: &str) -> anyhow::Result<Decimal> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Write as _;
+
+    fn write_temp_toml(name: &str, content: &str) -> std::path::PathBuf {
+        let path = std::env::temp_dir().join(name);
+        let mut f = std::fs::File::create(&path).unwrap();
+        f.write_all(content.as_bytes()).unwrap();
+        path
+    }
+
+    #[test]
+    fn from_toml_file_missing_file_errors() {
+        let path = std::path::PathBuf::from("/nonexistent/path/symbols.toml");
+        let err = StooqQuotes::from_toml_file(&path).err().unwrap();
+        assert!(
+            err.to_string().contains("failed to read symbol map from"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn from_toml_file_invalid_toml_errors() {
+        let path = write_temp_toml("stooq_invalid.toml", "[[[ not valid toml");
+        let err = StooqQuotes::from_toml_file(&path).err().unwrap();
+        assert!(
+            err.to_string().contains("failed to parse"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn from_toml_file_flat_keys_errors() {
+        // Old flat format — missing [symbols] wrapper — must be rejected.
+        let toml = "[IBM]\nsuffix = \".US\"\n";
+        let path = write_temp_toml("stooq_flat.toml", toml);
+        let err = StooqQuotes::from_toml_file(&path).err().unwrap();
+        assert!(
+            err.to_string().contains("failed to parse"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn from_toml_file_valid_nested_format_parses() {
+        let toml =
+            "[symbols.IBM]\nsuffix = \".US\"\n\n[symbols.GSK]\nsuffix = \".UK\"\ndivisor = 100\n";
+        let path = write_temp_toml("stooq_valid.toml", toml);
+        let sut = StooqQuotes::from_toml_file(&path).unwrap();
+        let ibm = sut.map.get("IBM").unwrap();
+        assert_eq!(ibm.suffix, ".US");
+        assert!(ibm.divisor.is_none());
+        let gsk = sut.map.get("GSK").unwrap();
+        assert_eq!(gsk.suffix, ".UK");
+        assert_eq!(gsk.divisor, Some(100));
+    }
 
     #[tokio::test]
     async fn price_unknown_symbol_errors() {
